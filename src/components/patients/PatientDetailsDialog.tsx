@@ -11,6 +11,7 @@ import {
   CheckCircle,
   XCircle,
   Timer,
+  Building2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -22,7 +23,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Patient, Appointment } from '@/types/patient';
+import { Patient } from '@/types/patient';
+import { AppointmentWithClinic } from '@/types/clinic';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -30,10 +32,10 @@ interface PatientDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   patient: Patient | null;
-  appointments: Appointment[];
+  appointments: AppointmentWithClinic[];
 }
 
-const getStatusConfig = (status: Appointment['status']) => {
+const getStatusConfig = (status: AppointmentWithClinic['status']) => {
   switch (status) {
     case 'completed':
       return { label: 'Concluída', icon: CheckCircle, className: 'bg-success text-success-foreground' };
@@ -63,6 +65,10 @@ export const PatientDetailsDialog = ({
   const upcomingAppointments = appointments.filter(
     (a) => a.status === 'confirmed' || a.status === 'pending'
   );
+
+  // Group appointments by clinic
+  const clinicsSet = new Set(appointments.map((a) => a.clinic.id));
+  const totalClinics = clinicsSet.size;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -157,7 +163,7 @@ export const PatientDetailsDialog = ({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-4 gap-4 text-center">
                     <div className="p-3 bg-muted/50 rounded-lg">
                       <p className="text-2xl font-bold text-primary">{appointments.length}</p>
                       <p className="text-sm text-muted-foreground">Total de Consultas</p>
@@ -169,6 +175,10 @@ export const PatientDetailsDialog = ({
                     <div className="p-3 bg-muted/50 rounded-lg">
                       <p className="text-2xl font-bold text-warning">{upcomingAppointments.length}</p>
                       <p className="text-sm text-muted-foreground">Agendadas</p>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold text-info">{totalClinics}</p>
+                      <p className="text-sm text-muted-foreground">Clínicas</p>
                     </div>
                   </div>
                 </CardContent>
@@ -244,6 +254,10 @@ export const PatientDetailsDialog = ({
                                 <p className="text-sm text-muted-foreground">
                                   {appointment.professional}
                                 </p>
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Building2 className="h-3 w-3" />
+                                  {appointment.clinic.name}
+                                </div>
                                 {appointment.notes && (
                                   <p className="text-sm text-muted-foreground mt-2 p-2 bg-muted/50 rounded">
                                     {appointment.notes}

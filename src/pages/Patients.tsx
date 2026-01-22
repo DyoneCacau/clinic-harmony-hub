@@ -6,8 +6,10 @@ import { PatientSearch } from '@/components/patients/PatientSearch';
 import { PatientsList } from '@/components/patients/PatientsList';
 import { PatientFormDialog } from '@/components/patients/PatientFormDialog';
 import { PatientDetailsDialog } from '@/components/patients/PatientDetailsDialog';
+import { WhatsAppConfirmationDialog } from '@/components/patients/WhatsAppConfirmationDialog';
 import { Patient } from '@/types/patient';
-import { mockPatients, mockAppointments } from '@/data/mockPatients';
+import { mockPatients } from '@/data/mockPatients';
+import { mockAppointmentsWithClinic } from '@/data/mockClinics';
 
 const Patients = () => {
   const [patients, setPatients] = useState<Patient[]>(mockPatients);
@@ -15,6 +17,7 @@ const Patients = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
 
@@ -40,6 +43,11 @@ const Patients = () => {
   const handleEdit = (patient: Patient) => {
     setEditingPatient(patient);
     setFormDialogOpen(true);
+  };
+
+  const handleWhatsApp = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setWhatsAppDialogOpen(true);
   };
 
   const handleNewPatient = () => {
@@ -143,6 +151,7 @@ const Patients = () => {
           patients={filteredPatients}
           onView={handleView}
           onEdit={handleEdit}
+          onWhatsApp={handleWhatsApp}
         />
 
         {/* Form Dialog */}
@@ -158,7 +167,15 @@ const Patients = () => {
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           patient={selectedPatient}
-          appointments={selectedPatient ? mockAppointments[selectedPatient.id] || [] : []}
+          appointments={selectedPatient ? mockAppointmentsWithClinic[selectedPatient.id] || [] : []}
+        />
+
+        {/* WhatsApp Confirmation Dialog */}
+        <WhatsAppConfirmationDialog
+          open={whatsAppDialogOpen}
+          onOpenChange={setWhatsAppDialogOpen}
+          patient={selectedPatient}
+          appointments={selectedPatient ? mockAppointmentsWithClinic[selectedPatient.id] || [] : []}
         />
       </div>
     </MainLayout>

@@ -1,7 +1,8 @@
-import { Phone, Mail, MapPin, Calendar, AlertCircle } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, AlertCircle, MessageSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Patient } from '@/types/patient';
 import { format, differenceInYears, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -10,9 +11,10 @@ interface PatientCardProps {
   patient: Patient;
   onView: (patient: Patient) => void;
   onEdit: (patient: Patient) => void;
+  onWhatsApp: (patient: Patient) => void;
 }
 
-export const PatientCard = ({ patient, onView, onEdit }: PatientCardProps) => {
+export const PatientCard = ({ patient, onView, onEdit, onWhatsApp }: PatientCardProps) => {
   const age = differenceInYears(new Date(), parseISO(patient.birthDate));
 
   return (
@@ -88,6 +90,21 @@ export const PatientCard = ({ patient, onView, onEdit }: PatientCardProps) => {
           >
             Editar
           </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="outline"
+                size="sm" 
+                className="bg-success/10 border-success/30 hover:bg-success/20 text-success"
+                onClick={() => onWhatsApp(patient)}
+              >
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Confirmar consulta via WhatsApp</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </CardContent>
     </Card>
