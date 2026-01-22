@@ -6,9 +6,10 @@ interface PatientsListProps {
   patients: Patient[];
   onView: (patient: Patient) => void;
   onEdit: (patient: Patient) => void;
+  onWhatsApp: (patient: Patient) => void;
 }
 
-export const PatientsList = ({ patients, onView, onEdit }: PatientsListProps) => {
+export const PatientsList = ({ patients, onView, onEdit, onWhatsApp }: PatientsListProps) => {
   if (patients.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -27,6 +28,7 @@ export const PatientsList = ({ patients, onView, onEdit }: PatientsListProps) =>
           patient={patient}
           onView={onView}
           onEdit={onEdit}
+          onWhatsApp={onWhatsApp}
         />
       ))}
     </div>
