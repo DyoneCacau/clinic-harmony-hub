@@ -25,6 +25,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
+import { DentalChart as DentalChartType } from '@/types/dental';
+import { DentalChart } from './DentalChart';
+import { mockDentalCharts, generateEmptyDentalChart } from '@/data/mockDentalCharts';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -57,8 +60,17 @@ export const PatientDetailsDialog = ({
   appointments,
 }: PatientDetailsDialogProps) => {
   const [activeTab, setActiveTab] = useState('info');
+  const [dentalChart, setDentalChart] = useState<DentalChartType | null>(null);
 
   if (!patient) return null;
+
+  // Load dental chart for patient
+  const currentChart = dentalChart || mockDentalCharts[patient.id] || generateEmptyDentalChart(patient.id);
+
+  const handleUpdateChart = (updatedChart: DentalChartType) => {
+    setDentalChart(updatedChart);
+    // In a real app, this would save to database
+  };
 
   const age = differenceInYears(new Date(), parseISO(patient.birthDate));
   const completedAppointments = appointments.filter((a) => a.status === 'completed').length;
@@ -96,8 +108,9 @@ export const PatientDetailsDialog = ({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="info">Informações</TabsTrigger>
+            <TabsTrigger value="dental">Odontograma</TabsTrigger>
             <TabsTrigger value="clinical">Dados Clínicos</TabsTrigger>
             <TabsTrigger value="history">Histórico</TabsTrigger>
           </TabsList>
@@ -184,6 +197,15 @@ export const PatientDetailsDialog = ({
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="dental" className="mt-4">
+            <ScrollArea className="h-[500px] pr-4">
+              <DentalChart
+                chart={currentChart}
+                onUpdateChart={handleUpdateChart}
+              />
+            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="clinical" className="mt-4">
