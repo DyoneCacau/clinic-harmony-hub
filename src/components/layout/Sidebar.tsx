@@ -23,12 +23,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+import { FileText } from "lucide-react";
+
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Calendar, label: "Agenda", path: "/agenda" },
   { icon: Users, label: "Pacientes", path: "/pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais" },
   { icon: DollarSign, label: "Financeiro", path: "/financeiro" },
+  { icon: FileText, label: "Termos", path: "/termos" },
   { icon: Package, label: "Estoque", path: "/estoque" },
   { icon: FileBarChart, label: "Relatórios", path: "/relatorios" },
   { icon: Shield, label: "Administração", path: "/administracao" },
