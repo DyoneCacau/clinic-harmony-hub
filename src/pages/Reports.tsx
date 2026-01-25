@@ -5,11 +5,13 @@ import { FinancialReport } from '@/components/reports/FinancialReport';
 import { AppointmentReport } from '@/components/reports/AppointmentReport';
 import { PatientReport } from '@/components/reports/PatientReport';
 import { ProductivityReport } from '@/components/reports/ProductivityReport';
+import { CommissionReport } from '@/components/commissions/CommissionReport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { mockClinics } from '@/data/mockClinics';
 import { mockProfessionals } from '@/data/mockAgenda';
 import { mockFinancialSummary, mockAppointmentSummary, mockPatientSummary, mockProductivityReports } from '@/data/mockReports';
-import { FileBarChart, DollarSign, Calendar, Users, TrendingUp } from 'lucide-react';
+import { mockCommissionCalculations } from '@/data/mockCommissions';
+import { FileBarChart, DollarSign, Calendar, Users, TrendingUp, Percent } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, subMonths } from 'date-fns';
 
@@ -42,13 +44,15 @@ export default function Reports() {
         />
 
         <Tabs defaultValue="financial" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="financial" className="flex items-center gap-2"><DollarSign className="h-4 w-4" />Financeiro</TabsTrigger>
+            <TabsTrigger value="commissions" className="flex items-center gap-2"><Percent className="h-4 w-4" />Comissões</TabsTrigger>
             <TabsTrigger value="appointments" className="flex items-center gap-2"><Calendar className="h-4 w-4" />Agendamentos</TabsTrigger>
             <TabsTrigger value="patients" className="flex items-center gap-2"><Users className="h-4 w-4" />Pacientes</TabsTrigger>
             <TabsTrigger value="productivity" className="flex items-center gap-2"><TrendingUp className="h-4 w-4" />Produtividade</TabsTrigger>
           </TabsList>
           <TabsContent value="financial"><FinancialReport data={mockFinancialSummary} /></TabsContent>
+          <TabsContent value="commissions"><CommissionReport calculations={mockCommissionCalculations} /></TabsContent>
           <TabsContent value="appointments"><AppointmentReport data={mockAppointmentSummary} /></TabsContent>
           <TabsContent value="patients"><PatientReport data={mockPatientSummary} /></TabsContent>
           <TabsContent value="productivity"><ProductivityReport data={mockProductivityReports} /></TabsContent>
