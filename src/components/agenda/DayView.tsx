@@ -9,6 +9,7 @@ interface DayViewProps {
   onEdit: (appointment: AgendaAppointment) => void;
   onCancel: (appointment: AgendaAppointment) => void;
   onConfirm: (appointment: AgendaAppointment) => void;
+  onComplete: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
 }
 
@@ -26,6 +27,7 @@ export function DayView({
   onEdit,
   onCancel,
   onConfirm,
+  onComplete,
   onWhatsApp,
 }: DayViewProps) {
   const getAppointmentsForSlot = (slot: string) => {
@@ -68,6 +70,7 @@ export function DayView({
                         onEdit={onEdit}
                         onCancel={onCancel}
                         onConfirm={onConfirm}
+                        onComplete={onComplete}
                         onWhatsApp={onWhatsApp}
                       />
                     ))}

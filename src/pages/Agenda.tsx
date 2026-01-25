@@ -9,10 +9,18 @@ import { DayView } from '@/components/agenda/DayView';
 import { WeekView } from '@/components/agenda/WeekView';
 import { MonthView } from '@/components/agenda/MonthView';
 import { AppointmentFormDialog } from '@/components/agenda/AppointmentFormDialog';
+import { CompleteAppointmentDialog } from '@/components/agenda/CompleteAppointmentDialog';
 import { AgendaAppointment, AgendaView } from '@/types/agenda';
+import { PaymentMethod, Transaction } from '@/types/financial';
+import { CommissionCalculation } from '@/types/commission';
 import { mockAgendaAppointments, mockProfessionals } from '@/data/mockAgenda';
 import { mockClinics } from '@/data/mockClinics';
+import { completeAppointment } from '@/services/commissionService';
 import { toast } from 'sonner';
+
+// Shared state for financial integration (in real app, use context or state management)
+export const financialTransactions: Transaction[] = [];
+export const commissionCalculations: CommissionCalculation[] = [];
 
 export default function Agenda() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -23,6 +31,8 @@ export default function Agenda() {
   const [appointments, setAppointments] = useState<AgendaAppointment[]>(mockAgendaAppointments);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AgendaAppointment | null>(null);
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [completingAppointment, setCompletingAppointment] = useState<AgendaAppointment | null>(null);
 
   const filteredAppointments = useMemo(() => {
     return appointments.filter((apt) => {
@@ -65,6 +75,47 @@ export default function Agenda() {
       )
     );
     toast.success('Agendamento confirmado');
+  };
+
+  const handleComplete = (appointment: AgendaAppointment) => {
+    setCompletingAppointment(appointment);
+    setCompleteDialogOpen(true);
+  };
+
+  const handleCompleteConfirm = (
+    appointment: AgendaAppointment,
+    serviceValue: number,
+    paymentMethod: PaymentMethod,
+    commissionAmount: number | null
+  ) => {
+    // Generate financial entries
+    const result = completeAppointment(appointment, serviceValue, paymentMethod);
+
+    // Add to shared state (in real app, save to database)
+    financialTransactions.push(result.incomeTransaction);
+    if (result.commissionTransaction) {
+      financialTransactions.push(result.commissionTransaction);
+    }
+    if (result.commission) {
+      commissionCalculations.push(result.commission);
+    }
+
+    // Update appointment status
+    setAppointments((prev) =>
+      prev.map((apt) =>
+        apt.id === appointment.id
+          ? { ...apt, status: 'completed' as const, paymentStatus: 'paid' as const }
+          : apt
+      )
+    );
+
+    // Show success with details
+    const commissionInfo = commissionAmount
+      ? ` | Comissão: R$ ${commissionAmount.toFixed(2)}`
+      : '';
+    toast.success(
+      `Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}${commissionInfo}`
+    );
   };
 
   const handleWhatsApp = (appointment: AgendaAppointment) => {
@@ -140,6 +191,7 @@ export default function Agenda() {
             onEdit={handleEdit}
             onCancel={handleCancel}
             onConfirm={handleConfirm}
+            onComplete={handleComplete}
             onWhatsApp={handleWhatsApp}
           />
         )}
@@ -151,6 +203,7 @@ export default function Agenda() {
             onEdit={handleEdit}
             onCancel={handleCancel}
             onConfirm={handleConfirm}
+            onComplete={handleComplete}
             onWhatsApp={handleWhatsApp}
           />
         )}
@@ -173,6 +226,14 @@ export default function Agenda() {
         clinics={mockClinics}
         existingAppointments={appointments}
         onSave={handleSave}
+      />
+
+      {/* Complete Appointment Dialog */}
+      <CompleteAppointmentDialog
+        open={completeDialogOpen}
+        onOpenChange={setCompleteDialogOpen}
+        appointment={completingAppointment}
+        onComplete={handleCompleteConfirm}
       />
     </MainLayout>
   );
