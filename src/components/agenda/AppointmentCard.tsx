@@ -1,4 +1,4 @@
-import { Clock, User, MapPin, MoreVertical, MessageSquare, Edit, Trash2, Check, X } from 'lucide-react';
+import { Clock, User, MapPin, MoreVertical, MessageSquare, Edit, Trash2, Check, X, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,6 +15,7 @@ interface AppointmentCardProps {
   onEdit: (appointment: AgendaAppointment) => void;
   onCancel: (appointment: AgendaAppointment) => void;
   onConfirm: (appointment: AgendaAppointment) => void;
+  onComplete?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
   compact?: boolean;
 }
@@ -68,6 +69,7 @@ export function AppointmentCard({
   onEdit,
   onCancel,
   onConfirm,
+  onComplete,
   onWhatsApp,
   compact = false,
 }: AppointmentCardProps) {
@@ -156,6 +158,15 @@ export function AppointmentCard({
               <DropdownMenuItem onClick={() => onConfirm(appointment)}>
                 <Check className="mr-2 h-4 w-4" />
                 Confirmar
+              </DropdownMenuItem>
+            )}
+            {(appointment.status === 'confirmed' || appointment.status === 'pending') && onComplete && (
+              <DropdownMenuItem 
+                onClick={() => onComplete(appointment)}
+                className="text-emerald-600 focus:text-emerald-600"
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Finalizar Atendimento
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={() => onEdit(appointment)}>
