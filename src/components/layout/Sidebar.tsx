@@ -14,6 +14,7 @@ import {
   ChevronRight,
   LogOut,
   Activity,
+  Percent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ const menuItems = [
   { icon: Users, label: "Pacientes", path: "/pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais" },
   { icon: DollarSign, label: "Financeiro", path: "/financeiro" },
+  { icon: Percent, label: "Comissões", path: "/comissoes" },
   { icon: FileText, label: "Termos", path: "/termos" },
   { icon: Package, label: "Estoque", path: "/estoque" },
   { icon: FileBarChart, label: "Relatórios", path: "/relatorios" },
