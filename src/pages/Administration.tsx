@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,10 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Label } from '@/components/ui/label';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 import {
   Shield,
   Users,
@@ -31,18 +27,18 @@ import {
   Calendar as CalendarIcon,
   Download,
   Search,
-  Building2,
   TrendingUp,
   AlertTriangle,
   CheckCircle,
   Timer,
-  FileSpreadsheet,
+  Settings,
 } from 'lucide-react';
-import { mockTimeClockEntries, mockEmployees } from '@/data/mockTimeClock';
-import { mockClinics } from '@/data/mockClinics';
-import { TimeClockEntry, userRoleLabels } from '@/types/timeclock';
+import { UserManagement } from '@/components/admin/UserManagement';
+import { PendingCorrections } from '@/components/admin/PendingCorrections';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   BarChart,
@@ -60,88 +56,208 @@ import {
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+interface TimeClockEntry {
+  id: string;
+  user_id: string;
+  entry_type: string;
+  timestamp: string;
+  is_correction: boolean;
+  correction_status: string;
+  correction_reason: string | null;
+}
+
+interface SystemUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'receptionist' | 'seller';
+  is_active: boolean;
+  created_at: string;
+}
+
+interface PendingCorrection {
+  id: string;
+  user_id: string;
+  user_name: string;
+  entry_type: string;
+  timestamp: string;
+  correction_reason: string;
+  created_at: string;
+}
+
 export default function Administration() {
-  const [entries] = useState<TimeClockEntry[]>(mockTimeClockEntries);
+  const { isAdmin, user } = useAuth();
+  const [entries, setEntries] = useState<TimeClockEntry[]>([]);
+  const [users, setUsers] = useState<SystemUser[]>([]);
+  const [pendingCorrections, setPendingCorrections] = useState<PendingCorrection[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('all');
-  const [selectedClinic, setSelectedClinic] = useState('all');
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+  const [dateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
   });
-  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    // Fetch time clock entries
+    const { data: entriesData } = await supabase
+      .from('time_clock_entries')
+      .select('*')
+      .gte('timestamp', dateRange.from.toISOString())
+      .lte('timestamp', dateRange.to.toISOString())
+      .order('timestamp', { ascending: false });
+
+    if (entriesData) {
+      setEntries(entriesData);
+    }
+
+    // Fetch users with roles (not admin)
+    const { data: profilesData } = await supabase.from('profiles').select('*');
+
+    const { data: rolesData } = await supabase
+      .from('user_roles')
+      .select('*')
+      .in('role', ['receptionist', 'seller']);
+
+    if (profilesData && rolesData) {
+      const usersWithRoles: SystemUser[] = [];
+      for (const role of rolesData) {
+        const profile = profilesData.find((p) => p.user_id === role.user_id);
+        if (profile) {
+          usersWithRoles.push({
+            id: profile.user_id,
+            name: profile.name,
+            email: profile.email,
+            phone: profile.phone || '',
+            role: role.role as 'receptionist' | 'seller',
+            is_active: profile.is_active,
+            created_at: profile.created_at,
+          });
+        }
+      }
+      setUsers(usersWithRoles);
+    }
+
+    // Fetch pending corrections
+    const { data: correctionsData } = await supabase
+      .from('time_clock_entries')
+      .select('*')
+      .eq('correction_status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (correctionsData && profilesData) {
+      const corrections: PendingCorrection[] = correctionsData.map((c) => {
+        const profile = profilesData.find((p) => p.user_id === c.user_id);
+        return {
+          id: c.id,
+          user_id: c.user_id,
+          user_name: profile?.name || 'Usuário',
+          entry_type: c.entry_type,
+          timestamp: c.timestamp,
+          correction_reason: c.correction_reason || '',
+          created_at: c.created_at,
+        };
+      });
+      setPendingCorrections(corrections);
+    }
+  };
+
+  const handleApproveCorrection = async (id: string) => {
+    const { error } = await supabase
+      .from('time_clock_entries')
+      .update({
+        correction_status: 'approved',
+        approved_by: user?.id,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Erro ao aprovar correção');
+    } else {
+      toast.success('Correção aprovada com sucesso!');
+      fetchData();
+    }
+  };
+
+  const handleRejectCorrection = async (id: string) => {
+    const { error } = await supabase
+      .from('time_clock_entries')
+      .update({
+        correction_status: 'rejected',
+        approved_by: user?.id,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Erro ao rejeitar correção');
+    } else {
+      toast.success('Correção rejeitada');
+      fetchData();
+    }
+  };
 
   const filteredEntries = useMemo(() => {
-    return entries.filter(entry => {
-      const entryDate = new Date(entry.date);
-      const matchesEmployee = selectedEmployee === 'all' || entry.userId === selectedEmployee;
-      const matchesClinic = selectedClinic === 'all' || entry.clinicId === selectedClinic;
-      const matchesDate = entryDate >= dateRange.from && entryDate <= dateRange.to;
-      const matchesSearch = entry.userName.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesEmployee && matchesClinic && matchesDate && matchesSearch;
+    return entries.filter((entry) => {
+      const matchesEmployee = selectedEmployee === 'all' || entry.user_id === selectedEmployee;
+      return matchesEmployee && entry.correction_status === 'approved';
     });
-  }, [entries, selectedEmployee, selectedClinic, dateRange, searchTerm]);
+  }, [entries, selectedEmployee]);
 
   const stats = useMemo(() => {
-    const completedEntries = filteredEntries.filter(e => e.status === 'completed');
-    const totalHours = completedEntries.reduce((sum, e) => sum + (e.totalHours || 0), 0);
-    const uniqueEmployees = new Set(filteredEntries.map(e => e.userId)).size;
-    const lateArrivals = completedEntries.filter(e => {
-      const [hour] = e.clockIn.split(':').map(Number);
-      return hour >= 9; // Consider 9:00 as late
+    const clockIns = filteredEntries.filter((e) => e.entry_type === 'clock_in');
+    const uniqueUsers = new Set(filteredEntries.map((e) => e.user_id)).size;
+    const lateArrivals = clockIns.filter((e) => {
+      const hour = new Date(e.timestamp).getHours();
+      return hour >= 9;
     }).length;
-    
+
     return {
-      totalEntries: completedEntries.length,
-      totalHours,
-      uniqueEmployees,
+      totalEntries: clockIns.length,
+      totalHours: clockIns.length * 8, // Approximate
+      uniqueEmployees: uniqueUsers,
       lateArrivals,
-      averageHours: completedEntries.length > 0 ? totalHours / completedEntries.length : 0,
     };
   }, [filteredEntries]);
 
-  // Employee summary
-  const employeeSummary = useMemo(() => {
-    const summary = new Map<string, { name: string; role: string; days: number; hours: number; lates: number }>();
-    
-    filteredEntries.forEach(entry => {
-      const existing = summary.get(entry.userId) || {
-        name: entry.userName,
-        role: entry.userRole,
-        days: 0,
-        hours: 0,
-        lates: 0,
-      };
-      
-      if (entry.status === 'completed') {
-        existing.days++;
-        existing.hours += entry.totalHours || 0;
-        const [hour] = entry.clockIn.split(':').map(Number);
-        if (hour >= 9) existing.lates++;
-      }
-      
-      summary.set(entry.userId, existing);
-    });
-    
-    return Array.from(summary.entries()).map(([id, data]) => ({ id, ...data }));
-  }, [filteredEntries]);
+  // Chart data by user
+  const hoursChartData = useMemo(() => {
+    const userHours = new Map<string, { name: string; hours: number }>();
 
-  // Chart data
-  const hoursChartData = employeeSummary.map(emp => ({
-    name: emp.name.split(' ').slice(0, 2).join(' '),
-    horas: Math.round(emp.hours * 10) / 10,
-  }));
+    filteredEntries
+      .filter((e) => e.entry_type === 'clock_in')
+      .forEach((entry) => {
+        const userProfile = users.find((u) => u.id === entry.user_id);
+        const existing = userHours.get(entry.user_id) || {
+          name: userProfile?.name || 'Usuário',
+          hours: 0,
+        };
+        existing.hours += 8;
+        userHours.set(entry.user_id, existing);
+      });
+
+    return Array.from(userHours.values()).map((u) => ({
+      name: u.name.split(' ').slice(0, 2).join(' '),
+      horas: u.hours,
+    }));
+  }, [filteredEntries, users]);
 
   const roleDistribution = useMemo(() => {
     const roles = new Map<string, number>();
-    mockEmployees.forEach(emp => {
-      const current = roles.get(emp.role) || 0;
-      roles.set(emp.role, current + 1);
+    users.forEach((u) => {
+      const current = roles.get(u.role) || 0;
+      roles.set(u.role, current + 1);
     });
     return Array.from(roles.entries()).map(([role, count]) => ({
-      name: userRoleLabels[role as keyof typeof userRoleLabels] || role,
+      name: role === 'receptionist' ? 'Recepcionista' : 'Vendedor',
       value: count,
     }));
-  }, []);
+  }, [users]);
 
   const handleExport = () => {
     toast.success('Relatório exportado com sucesso!');
@@ -157,7 +273,9 @@ export default function Administration() {
               <Shield className="h-7 w-7 text-primary" />
               Administração
             </h1>
-            <p className="text-muted-foreground">Painel administrativo e folha de ponto</p>
+            <p className="text-muted-foreground">
+              Painel administrativo, usuários e folha de ponto
+            </p>
           </div>
           <Button onClick={handleExport}>
             <Download className="mr-2 h-4 w-4" />
@@ -165,8 +283,21 @@ export default function Administration() {
           </Button>
         </div>
 
-        <Tabs defaultValue="timesheet" className="space-y-4">
+        <Tabs defaultValue="corrections" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="corrections" className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Correções
+              {pendingCorrections.length > 0 && (
+                <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 text-xs">
+                  {pendingCorrections.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Usuários
+            </TabsTrigger>
             <TabsTrigger value="timesheet" className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
               Folha de Ponto
@@ -175,11 +306,25 @@ export default function Administration() {
               <TrendingUp className="h-4 w-4" />
               Visão Geral
             </TabsTrigger>
-            <TabsTrigger value="employees" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Funcionários
+            <TabsTrigger value="settings" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Configurações
             </TabsTrigger>
           </TabsList>
+
+          {/* Corrections Tab */}
+          <TabsContent value="corrections">
+            <PendingCorrections
+              corrections={pendingCorrections}
+              onApprove={handleApproveCorrection}
+              onReject={handleRejectCorrection}
+            />
+          </TabsContent>
+
+          {/* Users Tab */}
+          <TabsContent value="users">
+            <UserManagement users={users} onRefresh={fetchData} />
+          </TabsContent>
 
           {/* Timesheet Tab */}
           <TabsContent value="timesheet" className="space-y-4">
@@ -202,19 +347,10 @@ export default function Administration() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      {mockEmployees.map(emp => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={selectedClinic} onValueChange={setSelectedClinic}>
-                    <SelectTrigger className="w-full md:w-[200px]">
-                      <SelectValue placeholder="Clínica" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas as Clínicas</SelectItem>
-                      {mockClinics.map(clinic => (
-                        <SelectItem key={clinic.id} value={clinic.id}>{clinic.name}</SelectItem>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -246,7 +382,7 @@ export default function Administration() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Total de Horas</p>
-                      <p className="text-2xl font-bold">{stats.totalHours.toFixed(1)}h</p>
+                      <p className="text-2xl font-bold">{stats.totalHours}h</p>
                     </div>
                   </div>
                 </CardContent>
@@ -291,51 +427,37 @@ export default function Administration() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Funcionário</TableHead>
-                      <TableHead>Função</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Entrada</TableHead>
-                      <TableHead>Intervalo</TableHead>
-                      <TableHead>Saída</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Data/Hora</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEntries.map((entry) => {
-                      const isLate = entry.clockIn >= '09:00';
+                    {filteredEntries.slice(0, 20).map((entry) => {
+                      const userProfile = users.find((u) => u.id === entry.user_id);
                       return (
                         <TableRow key={entry.id}>
-                          <TableCell className="font-medium">{entry.userName}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{userRoleLabels[entry.userRole]}</Badge>
-                          </TableCell>
-                          <TableCell>{format(new Date(entry.date), 'dd/MM/yyyy')}</TableCell>
-                          <TableCell>
-                            <span className={isLate ? 'text-amber-600 font-medium' : ''}>
-                              {entry.clockIn}
-                              {isLate && <AlertTriangle className="inline ml-1 h-3 w-3" />}
-                            </span>
+                          <TableCell className="font-medium">
+                            {userProfile?.name || 'Usuário'}
                           </TableCell>
                           <TableCell>
-                            {entry.lunchStart && entry.lunchEnd
-                              ? `${entry.lunchStart} - ${entry.lunchEnd}`
-                              : entry.lunchStart || '-'}
+                            <Badge variant="outline">
+                              {entry.entry_type === 'clock_in' && 'Entrada'}
+                              {entry.entry_type === 'clock_out' && 'Saída'}
+                              {entry.entry_type === 'lunch_start' && 'Início Intervalo'}
+                              {entry.entry_type === 'lunch_end' && 'Fim Intervalo'}
+                            </Badge>
                           </TableCell>
-                          <TableCell>{entry.clockOut || '-'}</TableCell>
-                          <TableCell className="text-right font-medium">
-                            {entry.totalHours ? `${entry.totalHours.toFixed(2)}h` : '-'}
+                          <TableCell>
+                            {format(new Date(entry.timestamp), "dd/MM/yyyy 'às' HH:mm", {
+                              locale: ptBR,
+                            })}
                           </TableCell>
                           <TableCell className="text-center">
-                            {entry.status === 'completed' ? (
-                              <Badge className="bg-emerald-500">
-                                <CheckCircle className="mr-1 h-3 w-3" />
-                                Concluído
-                              </Badge>
-                            ) : entry.status === 'working' ? (
-                              <Badge className="bg-blue-500">Trabalhando</Badge>
-                            ) : (
-                              <Badge className="bg-amber-500">Intervalo</Badge>
-                            )}
+                            <Badge className="bg-emerald-500">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              Aprovado
+                            </Badge>
                           </TableCell>
                         </TableRow>
                       );
@@ -378,7 +500,9 @@ export default function Administration() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) =>
+                          `${name}: ${(percent * 100).toFixed(0)}%`
+                        }
                         outerRadius={100}
                         fill="#8884d8"
                         dataKey="value"
@@ -396,51 +520,45 @@ export default function Administration() {
             </div>
           </TabsContent>
 
-          {/* Employees Tab */}
-          <TabsContent value="employees" className="space-y-4">
+          {/* Settings Tab */}
+          <TabsContent value="settings">
             <Card>
               <CardHeader>
-                <CardTitle>Resumo por Funcionário</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  Configurações do Sistema
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead>Função</TableHead>
-                      <TableHead className="text-center">Dias Trabalhados</TableHead>
-                      <TableHead className="text-right">Horas Totais</TableHead>
-                      <TableHead className="text-right">Média/Dia</TableHead>
-                      <TableHead className="text-center">Atrasos</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employeeSummary.map((emp) => (
-                      <TableRow key={emp.id}>
-                        <TableCell className="font-medium">{emp.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {userRoleLabels[emp.role as keyof typeof userRoleLabels]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">{emp.days}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {emp.hours.toFixed(1)}h
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {emp.days > 0 ? (emp.hours / emp.days).toFixed(1) : 0}h
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {emp.lates > 0 ? (
-                            <Badge variant="destructive">{emp.lates}</Badge>
-                          ) : (
-                            <Badge variant="secondary">0</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border p-4">
+                  <h3 className="font-medium mb-2">Horário de Trabalho</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Defina o horário padrão de entrada e saída dos funcionários
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium">Entrada</label>
+                      <Input type="time" defaultValue="08:00" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Saída</label>
+                      <Input type="time" defaultValue="18:00" className="mt-1" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <h3 className="font-medium mb-2">Tolerância de Atraso</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Tempo de tolerância antes de considerar como atraso
+                  </p>
+                  <div className="mt-4">
+                    <Input type="number" defaultValue="15" className="w-32" />
+                    <span className="ml-2 text-sm text-muted-foreground">minutos</span>
+                  </div>
+                </div>
+
+                <Button>Salvar Configurações</Button>
               </CardContent>
             </Card>
           </TabsContent>

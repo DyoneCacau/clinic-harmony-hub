@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,120 +13,162 @@ import {
   AlertCircle,
   Calendar,
   Timer,
+  Edit,
 } from 'lucide-react';
-import { mockTimeClockEntries, calculateTotalHours, mockEmployees } from '@/data/mockTimeClock';
-import { TimeClockEntry, userRoleLabels } from '@/types/timeclock';
+import { TimeClockCorrectionDialog } from '@/components/timeclock/TimeClockCorrectionDialog';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-// Simulated current user
-const currentUser = {
-  id: 'prof1',
-  name: 'Dr. Carlos Oliveira',
-  role: 'professional' as const,
-};
+interface TimeClockEntry {
+  id: string;
+  user_id: string;
+  entry_type: string;
+  timestamp: string;
+  is_correction: boolean;
+  correction_status: string;
+  correction_reason: string | null;
+}
 
 export default function TimeClock() {
-  const [entries, setEntries] = useState<TimeClockEntry[]>(mockTimeClockEntries);
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const currentTime = format(new Date(), 'HH:mm');
+  const { user, profile } = useAuth();
+  const [entries, setEntries] = useState<TimeClockEntry[]>([]);
+  const [correctionDialogOpen, setCorrectionDialogOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  const todayEntry = useMemo(() => {
-    return entries.find(e => e.userId === currentUser.id && e.date === today);
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchEntries();
+    }
+  }, [user]);
+
+  const fetchEntries = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('time_clock_entries')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('timestamp', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('Error fetching entries:', error);
+    } else {
+      setEntries(data || []);
+    }
+  };
+
+  const today = format(new Date(), 'yyyy-MM-dd');
+
+  const todayEntries = useMemo(() => {
+    return entries.filter((e) => e.timestamp.startsWith(today) && e.correction_status === 'approved');
   }, [entries, today]);
 
-  const userEntries = useMemo(() => {
-    return entries
-      .filter(e => e.userId === currentUser.id)
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [entries]);
+  const hasClockIn = todayEntries.some((e) => e.entry_type === 'clock_in');
+  const hasClockOut = todayEntries.some((e) => e.entry_type === 'clock_out');
+  const hasLunchStart = todayEntries.some((e) => e.entry_type === 'lunch_start');
+  const hasLunchEnd = todayEntries.some((e) => e.entry_type === 'lunch_end');
+
+  const currentStatus = useMemo(() => {
+    if (!hasClockIn) return 'not_started';
+    if (hasClockOut) return 'completed';
+    if (hasLunchStart && !hasLunchEnd) return 'lunch';
+    return 'working';
+  }, [hasClockIn, hasClockOut, hasLunchStart, hasLunchEnd]);
+
+  const pendingCorrections = entries.filter((e) => e.correction_status === 'pending');
 
   const weekStats = useMemo(() => {
-    const weekEntries = userEntries.filter(e => e.status === 'completed').slice(0, 5);
-    const totalHours = weekEntries.reduce((sum, e) => sum + (e.totalHours || 0), 0);
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const weekEntries = entries.filter(
+      (e) => new Date(e.timestamp) >= weekAgo && e.correction_status === 'approved'
+    );
+
+    const clockIns = weekEntries.filter((e) => e.entry_type === 'clock_in').length;
+
     return {
-      days: weekEntries.length,
-      hours: totalHours,
-      average: weekEntries.length > 0 ? totalHours / weekEntries.length : 0,
+      days: clockIns,
+      hours: clockIns * 8, // Approximate
+      average: 8,
     };
-  }, [userEntries]);
+  }, [entries]);
 
-  const handleClockIn = () => {
-    if (todayEntry) {
-      toast.error('Você já registrou entrada hoje');
+  const handleClockAction = async (entryType: string) => {
+    if (!user) {
+      toast.error('Você precisa estar logado');
       return;
     }
 
-    const newEntry: TimeClockEntry = {
-      id: `tc${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      userRole: currentUser.role,
-      clinicId: 'clinic1',
-      clinicName: 'Odonto Premium Centro',
-      date: today,
-      clockIn: currentTime,
-      status: 'working',
-    };
+    const { error } = await supabase.from('time_clock_entries').insert({
+      user_id: user.id,
+      entry_type: entryType,
+      timestamp: new Date().toISOString(),
+      is_correction: false,
+      correction_status: 'approved',
+    });
 
-    setEntries(prev => [newEntry, ...prev]);
-    toast.success(`Entrada registrada às ${currentTime}!`);
-  };
-
-  const handleLunchStart = () => {
-    if (!todayEntry || todayEntry.status !== 'working' || todayEntry.lunchStart) {
-      toast.error('Não é possível iniciar intervalo agora');
-      return;
+    if (error) {
+      toast.error('Erro ao registrar ponto');
+      console.error(error);
+    } else {
+      const labels: Record<string, string> = {
+        clock_in: 'Entrada registrada',
+        clock_out: 'Saída registrada',
+        lunch_start: 'Intervalo iniciado',
+        lunch_end: 'Intervalo finalizado',
+      };
+      toast.success(labels[entryType] + '!');
+      fetchEntries();
     }
-
-    setEntries(prev => prev.map(e => 
-      e.id === todayEntry.id 
-        ? { ...e, lunchStart: currentTime, status: 'lunch' as const }
-        : e
-    ));
-    toast.success(`Intervalo iniciado às ${currentTime}`);
   };
 
-  const handleLunchEnd = () => {
-    if (!todayEntry || todayEntry.status !== 'lunch') {
-      toast.error('Não é possível finalizar intervalo agora');
-      return;
+  const handleCorrectionSubmit = async (correction: {
+    date: string;
+    entryType: string;
+    time: string;
+    reason: string;
+  }) => {
+    if (!user) return;
+
+    const timestamp = new Date(`${correction.date}T${correction.time}`).toISOString();
+
+    const { error } = await supabase.from('time_clock_entries').insert({
+      user_id: user.id,
+      entry_type: correction.entryType,
+      timestamp,
+      is_correction: true,
+      correction_status: 'pending',
+      correction_reason: correction.reason,
+    });
+
+    if (error) {
+      toast.error('Erro ao enviar correção');
+    } else {
+      toast.success('Solicitação de correção enviada para aprovação!');
+      fetchEntries();
     }
-
-    setEntries(prev => prev.map(e => 
-      e.id === todayEntry.id 
-        ? { ...e, lunchEnd: currentTime, status: 'working' as const }
-        : e
-    ));
-    toast.success(`Intervalo finalizado às ${currentTime}`);
   };
 
-  const handleClockOut = () => {
-    if (!todayEntry || todayEntry.status === 'completed' || todayEntry.status === 'lunch') {
-      toast.error('Não é possível registrar saída agora');
-      return;
-    }
-
-    const updatedEntry = {
-      ...todayEntry,
-      clockOut: currentTime,
-      status: 'completed' as const,
-    };
-    updatedEntry.totalHours = calculateTotalHours(updatedEntry);
-
-    setEntries(prev => prev.map(e => e.id === todayEntry.id ? updatedEntry : e));
-    toast.success(`Saída registrada às ${currentTime}! Total: ${updatedEntry.totalHours.toFixed(2)}h`);
-  };
-
-  const getStatusBadge = (status: TimeClockEntry['status']) => {
-    switch (status) {
+  const getStatusBadge = () => {
+    switch (currentStatus) {
       case 'working':
         return <Badge className="bg-emerald-500">Trabalhando</Badge>;
       case 'lunch':
         return <Badge className="bg-amber-500">Em Intervalo</Badge>;
       case 'completed':
-        return <Badge variant="secondary">Finalizado</Badge>;
+        return <Badge variant="secondary">Jornada Concluída</Badge>;
+      default:
+        return <Badge variant="outline">Aguardando Entrada</Badge>;
     }
   };
 
@@ -144,29 +186,47 @@ export default function TimeClock() {
           </p>
         </div>
 
+        {/* Pending Corrections Alert */}
+        {pendingCorrections.length > 0 && (
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-2 text-amber-800">
+                <AlertCircle className="h-5 w-5" />
+                <span>
+                  Você tem {pendingCorrections.length} correção(ões) pendente(s) de
+                  aprovação
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Current Status */}
         <Card className="border-2 border-primary/20">
           <CardContent className="pt-6">
             <div className="text-center space-y-4">
               <div className="flex items-center justify-center gap-2 text-4xl font-bold text-primary">
                 <Timer className="h-10 w-10" />
-                {format(new Date(), 'HH:mm:ss')}
-              </div>
-              
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-lg">{currentUser.name}</span>
-                <Badge variant="outline">{userRoleLabels[currentUser.role]}</Badge>
+                {format(currentTime, 'HH:mm:ss')}
               </div>
 
-              {todayEntry && (
-                <div className="flex items-center justify-center gap-2">
-                  {getStatusBadge(todayEntry.status)}
-                  <span className="text-muted-foreground">
-                    Entrada: {todayEntry.clockIn}
-                    {todayEntry.lunchStart && ` | Intervalo: ${todayEntry.lunchStart}`}
-                    {todayEntry.lunchEnd && ` - ${todayEntry.lunchEnd}`}
-                    {todayEntry.clockOut && ` | Saída: ${todayEntry.clockOut}`}
-                  </span>
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-lg">{profile?.name || 'Usuário'}</span>
+                {getStatusBadge()}
+              </div>
+
+              {hasClockIn && (
+                <div className="text-muted-foreground text-sm">
+                  Entrada: {format(new Date(todayEntries.find((e) => e.entry_type === 'clock_in')!.timestamp), 'HH:mm')}
+                  {hasLunchStart && (
+                    <> | Intervalo: {format(new Date(todayEntries.find((e) => e.entry_type === 'lunch_start')!.timestamp), 'HH:mm')}</>
+                  )}
+                  {hasLunchEnd && (
+                    <> - {format(new Date(todayEntries.find((e) => e.entry_type === 'lunch_end')!.timestamp), 'HH:mm')}</>
+                  )}
+                  {hasClockOut && (
+                    <> | Saída: {format(new Date(todayEntries.find((e) => e.entry_type === 'clock_out')!.timestamp), 'HH:mm')}</>
+                  )}
                 </div>
               )}
 
@@ -174,42 +234,57 @@ export default function TimeClock() {
 
               {/* Action Buttons */}
               <div className="flex flex-wrap justify-center gap-4">
-                {!todayEntry && (
-                  <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleClockIn}>
+                {currentStatus === 'not_started' && (
+                  <Button
+                    size="lg"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => handleClockAction('clock_in')}
+                  >
                     <Play className="mr-2 h-5 w-5" />
                     Registrar Entrada
                   </Button>
                 )}
 
-                {todayEntry?.status === 'working' && !todayEntry.lunchStart && (
-                  <Button size="lg" variant="outline" onClick={handleLunchStart}>
+                {currentStatus === 'working' && !hasLunchStart && (
+                  <Button size="lg" variant="outline" onClick={() => handleClockAction('lunch_start')}>
                     <Coffee className="mr-2 h-5 w-5" />
                     Iniciar Intervalo
                   </Button>
                 )}
 
-                {todayEntry?.status === 'lunch' && (
-                  <Button size="lg" className="bg-amber-600 hover:bg-amber-700" onClick={handleLunchEnd}>
+                {currentStatus === 'lunch' && (
+                  <Button
+                    size="lg"
+                    className="bg-amber-600 hover:bg-amber-700"
+                    onClick={() => handleClockAction('lunch_end')}
+                  >
                     <Play className="mr-2 h-5 w-5" />
                     Finalizar Intervalo
                   </Button>
                 )}
 
-                {todayEntry?.status === 'working' && (
-                  <Button size="lg" variant="destructive" onClick={handleClockOut}>
+                {currentStatus === 'working' && (
+                  <Button
+                    size="lg"
+                    variant="destructive"
+                    onClick={() => handleClockAction('clock_out')}
+                  >
                     <Square className="mr-2 h-5 w-5" />
                     Registrar Saída
                   </Button>
                 )}
 
-                {todayEntry?.status === 'completed' && (
+                {currentStatus === 'completed' && (
                   <div className="flex items-center gap-2 text-emerald-600">
                     <CheckCircle className="h-6 w-6" />
-                    <span className="text-lg font-medium">
-                      Jornada concluída - {todayEntry.totalHours?.toFixed(2)}h trabalhadas
-                    </span>
+                    <span className="text-lg font-medium">Jornada concluída</span>
                   </div>
                 )}
+
+                <Button variant="outline" onClick={() => setCorrectionDialogOpen(true)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Solicitar Correção
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -239,7 +314,7 @@ export default function TimeClock() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Horas Totais (Semana)</p>
-                  <p className="text-2xl font-bold">{weekStats.hours.toFixed(1)}h</p>
+                  <p className="text-2xl font-bold">{weekStats.hours}h</p>
                 </div>
               </div>
             </CardContent>
@@ -253,7 +328,7 @@ export default function TimeClock() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Média Diária</p>
-                  <p className="text-2xl font-bold">{weekStats.average.toFixed(1)}h</p>
+                  <p className="text-2xl font-bold">{weekStats.average}h</p>
                 </div>
               </div>
             </CardContent>
@@ -267,51 +342,63 @@ export default function TimeClock() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {userEntries.slice(0, 7).map((entry) => (
-                <div 
+              {entries.slice(0, 10).map((entry) => (
+                <div
                   key={entry.id}
                   className="flex items-center justify-between p-3 rounded-lg border bg-card"
                 >
                   <div className="flex items-center gap-3">
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(entry.date), 'EEE', { locale: ptBR })}
+                        {format(new Date(entry.timestamp), 'EEE', { locale: ptBR })}
                       </p>
-                      <p className="font-bold">{format(new Date(entry.date), 'dd/MM')}</p>
+                      <p className="font-bold">
+                        {format(new Date(entry.timestamp), 'dd/MM')}
+                      </p>
                     </div>
                     <Separator orientation="vertical" className="h-10" />
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-4 text-sm">
-                        <span><strong>Entrada:</strong> {entry.clockIn}</span>
-                        {entry.lunchStart && (
-                          <span className="text-muted-foreground">
-                            Intervalo: {entry.lunchStart} - {entry.lunchEnd || '...'}
-                          </span>
-                        )}
-                        {entry.clockOut && (
-                          <span><strong>Saída:</strong> {entry.clockOut}</span>
-                        )}
-                      </div>
-                      {entry.notes && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          {entry.notes}
-                        </p>
+                    <div>
+                      <Badge variant="outline" className="mr-2">
+                        {entry.entry_type === 'clock_in' && 'Entrada'}
+                        {entry.entry_type === 'clock_out' && 'Saída'}
+                        {entry.entry_type === 'lunch_start' && 'Início Intervalo'}
+                        {entry.entry_type === 'lunch_end' && 'Fim Intervalo'}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {format(new Date(entry.timestamp), 'HH:mm')}
+                      </span>
+                      {entry.is_correction && (
+                        <Badge variant="secondary" className="ml-2">
+                          Correção
+                        </Badge>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    {entry.totalHours && (
-                      <span className="font-medium">{entry.totalHours.toFixed(2)}h</span>
-                    )}
-                    {getStatusBadge(entry.status)}
-                  </div>
+                  <Badge
+                    variant={
+                      entry.correction_status === 'approved'
+                        ? 'default'
+                        : entry.correction_status === 'pending'
+                        ? 'secondary'
+                        : 'destructive'
+                    }
+                  >
+                    {entry.correction_status === 'approved' && 'Aprovado'}
+                    {entry.correction_status === 'pending' && 'Pendente'}
+                    {entry.correction_status === 'rejected' && 'Rejeitado'}
+                  </Badge>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <TimeClockCorrectionDialog
+        open={correctionDialogOpen}
+        onOpenChange={setCorrectionDialogOpen}
+        onSubmit={handleCorrectionSubmit}
+      />
     </MainLayout>
   );
 }
