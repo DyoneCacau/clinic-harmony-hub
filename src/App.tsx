@@ -19,6 +19,7 @@ import Professionals from "./pages/Professionals";
 import TimeClock from "./pages/TimeClock";
 import Administration from "./pages/Administration";
 import SuperAdmin from "./pages/SuperAdmin";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -184,6 +185,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SuperAdmin />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/configuracoes"
+        element={
+          <ProtectedRoute>
+            <SubscriptionGate>
+              <Settings />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
