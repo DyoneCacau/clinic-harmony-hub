@@ -15,6 +15,8 @@ import {
   LogOut,
   Activity,
   Percent,
+  Clock,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,8 +26,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { FileText } from "lucide-react";
-
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Calendar, label: "Agenda", path: "/agenda" },
@@ -33,6 +33,7 @@ const menuItems = [
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais" },
   { icon: DollarSign, label: "Financeiro", path: "/financeiro" },
   { icon: Percent, label: "Comissões", path: "/comissoes" },
+  { icon: Clock, label: "Ponto", path: "/ponto" },
   { icon: FileText, label: "Termos", path: "/termos" },
   { icon: Package, label: "Estoque", path: "/estoque" },
   { icon: FileBarChart, label: "Relatórios", path: "/relatorios" },
