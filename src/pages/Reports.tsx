@@ -14,15 +14,31 @@ import { mockCommissionCalculations } from '@/data/mockCommissions';
 import { FileBarChart, DollarSign, Calendar, Users, TrendingUp, Percent } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, subMonths } from 'date-fns';
+import { useFeatureAccess } from '@/components/subscription/FeatureAction';
 
 export default function Reports() {
+  const { canAccess: canExport } = useFeatureAccess('relatorios');
   const [startDate, setStartDate] = useState(format(subMonths(new Date(), 3), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedClinic, setSelectedClinic] = useState('all');
   const [selectedProfessional, setSelectedProfessional] = useState('all');
 
-  const handleExportPDF = () => toast.info('Exportação PDF em desenvolvimento');
-  const handleExportExcel = () => toast.info('Exportação Excel em desenvolvimento');
+  const handleExportPDF = () => {
+    if (!canExport) {
+      toast.error('Exportação não disponível no seu plano');
+      return;
+    }
+    toast.info('Exportação PDF em desenvolvimento');
+  };
+  
+  const handleExportExcel = () => {
+    if (!canExport) {
+      toast.error('Exportação não disponível no seu plano');
+      return;
+    }
+    toast.info('Exportação Excel em desenvolvimento');
+  };
+  
   const handlePrint = () => window.print();
 
   return (

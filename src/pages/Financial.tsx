@@ -24,6 +24,7 @@ import { CashRegister, CashSummary, Transaction } from '@/types/financial';
 import { mockCashRegister } from '@/data/mockFinancial';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { FeatureButton } from '@/components/subscription/FeatureButton';
 
 export default function Financial() {
   const [cashRegister, setCashRegister] = useState<CashRegister>(mockCashRegister);
@@ -143,27 +144,39 @@ export default function Financial() {
           <div className="flex gap-2">
             {isCashOpen ? (
               <>
-                <Button variant="outline" onClick={() => setExpenseDialogOpen(true)}>
+                <FeatureButton 
+                  feature="financeiro" 
+                  variant="outline" 
+                  onClick={() => setExpenseDialogOpen(true)}
+                >
                   <Minus className="mr-2 h-4 w-4" />
                   Saída
-                </Button>
-                <Button onClick={() => setIncomeDialogOpen(true)}>
+                </FeatureButton>
+                <FeatureButton 
+                  feature="financeiro" 
+                  onClick={() => setIncomeDialogOpen(true)}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Entrada
-                </Button>
-                <Button
+                </FeatureButton>
+                <FeatureButton
+                  feature="financeiro"
                   variant="destructive"
                   onClick={() => setClosingDialogOpen(true)}
                 >
                   <Lock className="mr-2 h-4 w-4" />
                   Fechar Caixa
-                </Button>
+                </FeatureButton>
               </>
             ) : (
-              <Button onClick={handleOpenCash} className="bg-emerald-600 hover:bg-emerald-700">
+              <FeatureButton 
+                feature="financeiro" 
+                onClick={handleOpenCash} 
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
                 <Unlock className="mr-2 h-4 w-4" />
                 Abrir Caixa
-              </Button>
+              </FeatureButton>
             )}
           </div>
         </div>

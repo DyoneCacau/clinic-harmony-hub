@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { SubscriptionProvider, useSubscription } from "@/hooks/useSubscription";
 import { TrialExpiredScreen } from "@/components/subscription/TrialExpiredScreen";
+import { RequireFeature } from "@/components/subscription/RequireFeature";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Patients from "./pages/Patients";
@@ -70,6 +71,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      
+      {/* Dashboard - sempre disponível */}
       <Route
         path="/"
         element={
@@ -80,106 +83,148 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Pacientes */}
       <Route
         path="/pacientes"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Patients />
+              <RequireFeature feature="pacientes">
+                <Patients />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Agenda */}
       <Route
         path="/agenda"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Agenda />
+              <RequireFeature feature="agenda">
+                <Agenda />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Financeiro */}
       <Route
         path="/financeiro"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Financial />
+              <RequireFeature feature="financeiro">
+                <Financial />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Termos */}
       <Route
         path="/termos"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Terms />
+              <RequireFeature feature="termos">
+                <Terms />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Relatórios */}
       <Route
         path="/relatorios"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Reports />
+              <RequireFeature feature="relatorios">
+                <Reports />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Comissões */}
       <Route
         path="/comissoes"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Commissions />
+              <RequireFeature feature="comissoes">
+                <Commissions />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Estoque */}
       <Route
         path="/estoque"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Inventory />
+              <RequireFeature feature="estoque">
+                <Inventory />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Profissionais */}
       <Route
         path="/profissionais"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Professionals />
+              <RequireFeature feature="profissionais">
+                <Professionals />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Ponto */}
       <Route
         path="/ponto"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <TimeClock />
+              <RequireFeature feature="ponto">
+                <TimeClock />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* Administração */}
       <Route
         path="/administracao"
         element={
           <ProtectedRoute>
             <SubscriptionGate>
-              <Administration />
+              <RequireFeature feature="administracao">
+                <Administration />
+              </RequireFeature>
             </SubscriptionGate>
           </ProtectedRoute>
         }
       />
+
+      {/* SuperAdmin - sem verificação de feature */}
       <Route
         path="/superadmin"
         element={
@@ -188,6 +233,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Configurações - sempre disponível */}
       <Route
         path="/configuracoes"
         element={
@@ -198,6 +245,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

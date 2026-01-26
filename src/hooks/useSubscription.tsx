@@ -29,23 +29,42 @@ interface SubscriptionContextType {
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
-// Mapeamento de rotas para features
+// Mapeamento de rotas para features (slugs padronizados)
 const ROUTE_FEATURE_MAP: Record<string, string> = {
   '/': 'dashboard',
   '/agenda': 'agenda',
   '/pacientes': 'pacientes',
-  '/financeiro': 'financeiro',
-  '/relatorios': 'relatorios',
   '/profissionais': 'profissionais',
+  '/financeiro': 'financeiro',
   '/comissoes': 'comissoes',
   '/estoque': 'estoque',
-  '/termos': 'termos',
+  '/relatorios': 'relatorios',
   '/ponto': 'ponto',
   '/administracao': 'administracao',
+  '/termos': 'termos',
+  '/configuracoes': 'configuracoes',
 };
 
-// Features que sempre estão disponíveis
+// Features que sempre estão disponíveis (não dependem do plano)
 const ALWAYS_AVAILABLE = ['dashboard', 'configuracoes'];
+
+// Lista completa de features do sistema para referência
+export const ALL_FEATURES = [
+  'dashboard',
+  'agenda',
+  'pacientes',
+  'profissionais',
+  'financeiro',
+  'comissoes',
+  'estoque',
+  'relatorios',
+  'ponto',
+  'administracao',
+  'termos',
+  'configuracoes',
+] as const;
+
+export type Feature = typeof ALL_FEATURES[number];
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { user, isSuperAdmin } = useAuth();
