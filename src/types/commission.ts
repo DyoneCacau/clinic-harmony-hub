@@ -1,3 +1,5 @@
+import { LeadSource } from './agenda';
+
 export type CalculationType = 'percentage' | 'fixed';
 
 export type CalculationUnit = 'appointment' | 'ml' | 'arch' | 'unit' | 'session';
@@ -47,6 +49,10 @@ export interface CommissionCalculation {
   status: 'pending' | 'paid' | 'cancelled';
   paidAt?: string;
   transactionId?: string;
+  // New fields for tracking
+  sellerId?: string;
+  sellerName?: string;
+  leadSource?: LeadSource;
 }
 
 export interface CommissionSummary {

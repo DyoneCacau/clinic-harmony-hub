@@ -28,9 +28,10 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { AgendaAppointment, Professional } from '@/types/agenda';
+import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@/types/agenda';
 import { Clinic } from '@/types/clinic';
 import { mockPatients } from '@/data/mockPatients';
+import { mockStaffMembers } from '@/data/mockCommissions';
 import { toast } from 'sonner';
 
 interface AppointmentFormDialogProps {
@@ -63,8 +64,16 @@ export function AppointmentFormDialog({
   const [paymentStatus, setPaymentStatus] = useState<AgendaAppointment['paymentStatus']>('pending');
   const [notes, setNotes] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
+  // New fields
+  const [sellerId, setSellerId] = useState<string>('');
+  const [leadSource, setLeadSource] = useState<LeadSource | ''>('');
 
   const isEditing = !!appointment;
+
+  // Get sellers for the selected clinic
+  const availableSellers = mockStaffMembers.filter(
+    s => s.role === 'seller' && s.isActive && (!clinicId || s.clinicId === clinicId)
+  );
 
   useEffect(() => {
     if (appointment) {
@@ -78,6 +87,8 @@ export function AppointmentFormDialog({
       setStatus(appointment.status);
       setPaymentStatus(appointment.paymentStatus);
       setNotes(appointment.notes || '');
+      setSellerId(appointment.sellerId || '');
+      setLeadSource(appointment.leadSource || '');
     } else {
       // Reset form
       setDate(new Date());
@@ -90,6 +101,8 @@ export function AppointmentFormDialog({
       setStatus('pending');
       setPaymentStatus('pending');
       setNotes('');
+      setSellerId('');
+      setLeadSource('');
     }
   }, [appointment, open]);
 
@@ -125,6 +138,7 @@ export function AppointmentFormDialog({
     const patient = mockPatients.find((p) => p.id === patientId);
     const professional = professionals.find((p) => p.id === professionalId);
     const clinic = clinics.find((c) => c.id === clinicId);
+    const seller = sellerId ? availableSellers.find((s) => s.id === sellerId) : null;
 
     if (!patient || !professional || !clinic) return;
 
@@ -141,6 +155,9 @@ export function AppointmentFormDialog({
       paymentStatus,
       notes,
       clinic,
+      sellerId: seller?.id,
+      sellerName: seller?.name,
+      leadSource: leadSource || undefined,
     });
 
     onOpenChange(false);
@@ -331,6 +348,43 @@ export function AppointmentFormDialog({
                   <SelectItem value="pending">Pendente</SelectItem>
                   <SelectItem value="paid">Pago</SelectItem>
                   <SelectItem value="partial">Parcial</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* New Fields: Seller and Lead Source */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Vendedor Responsável</Label>
+              <Select value={sellerId} onValueChange={setSellerId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Nenhum</SelectItem>
+                  {availableSellers.map((seller) => (
+                    <SelectItem key={seller.id} value={seller.id}>
+                      {seller.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Origem do Lead</Label>
+              <Select value={leadSource} onValueChange={(v) => setLeadSource(v as LeadSource | '')}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Não informado</SelectItem>
+                  {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

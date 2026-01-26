@@ -4,9 +4,18 @@ export interface Professional {
   id: string;
   name: string;
   specialty: string;
-  crm?: string;
-  cro?: string;
+  cro: string; // Only CRO for dentistry
 }
+
+export type LeadSource = 'instagram' | 'whatsapp' | 'referral' | 'paid_traffic' | 'other';
+
+export const leadSourceLabels: Record<LeadSource, string> = {
+  instagram: 'Instagram',
+  whatsapp: 'WhatsApp',
+  referral: 'Indicação',
+  paid_traffic: 'Tráfego Pago',
+  other: 'Outros',
+};
 
 export interface AgendaAppointment {
   id: string;
@@ -21,6 +30,10 @@ export interface AgendaAppointment {
   paymentStatus: 'paid' | 'pending' | 'partial';
   notes?: string;
   clinic: Clinic;
+  // New fields for seller tracking
+  sellerId?: string;
+  sellerName?: string;
+  leadSource?: LeadSource;
 }
 
 export type AgendaView = 'day' | 'week' | 'month';
