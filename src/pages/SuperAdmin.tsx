@@ -7,10 +7,29 @@ import { PlansManagement } from "@/components/superadmin/PlansManagement";
 import { SubscriptionsManagement } from "@/components/superadmin/SubscriptionsManagement";
 import { PaymentsManagement } from "@/components/superadmin/PaymentsManagement";
 import { SuperAdminStats } from "@/components/superadmin/SuperAdminStats";
-import { Building2, CreditCard, Package, Receipt, LayoutDashboard } from "lucide-react";
+import { UpgradeRequestsManagement } from "@/components/superadmin/UpgradeRequestsManagement";
+import { Building2, CreditCard, Package, Receipt, LayoutDashboard, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
 
 export default function SuperAdmin() {
   const { isSuperAdmin, isLoading } = useAuth();
+  const [pendingRequests, setPendingRequests] = useState(0);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      fetchPendingCount();
+    }
+  }, [isSuperAdmin]);
+
+  async function fetchPendingCount() {
+    const { count } = await supabase
+      .from('upgrade_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
+    setPendingRequests(count || 0);
+  }
 
   if (isLoading) {
     return (
@@ -35,10 +54,19 @@ export default function SuperAdmin() {
         </div>
 
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
+            </TabsTrigger>
+            <TabsTrigger value="requests" className="flex items-center gap-2 relative">
+              <TrendingUp className="h-4 w-4" />
+              <span className="hidden sm:inline">Leads</span>
+              {pendingRequests > 0 && (
+                <Badge variant="destructive" className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute -top-1 -right-1">
+                  {pendingRequests}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="clinics" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
@@ -60,6 +88,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="dashboard">
             <SuperAdminStats />
+          </TabsContent>
+
+          <TabsContent value="requests">
+            <UpgradeRequestsManagement />
           </TabsContent>
 
           <TabsContent value="clinics">
