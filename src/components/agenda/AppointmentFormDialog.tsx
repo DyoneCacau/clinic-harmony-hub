@@ -357,12 +357,15 @@ export function AppointmentFormDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Vendedor Responsável</Label>
-              <Select value={sellerId} onValueChange={setSellerId}>
+              <Select 
+                value={sellerId || 'none'} 
+                onValueChange={(v) => setSellerId(v === 'none' ? '' : v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {availableSellers.map((seller) => (
                     <SelectItem key={seller.id} value={seller.id}>
                       {seller.name}
@@ -374,12 +377,15 @@ export function AppointmentFormDialog({
 
             <div className="grid gap-2">
               <Label>Origem do Lead</Label>
-              <Select value={leadSource} onValueChange={(v) => setLeadSource(v as LeadSource | '')}>
+              <Select 
+                value={leadSource || 'none'} 
+                onValueChange={(v) => setLeadSource(v === 'none' ? '' : v as LeadSource)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Não informado</SelectItem>
+                  <SelectItem value="none">Não informado</SelectItem>
                   {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
