@@ -103,6 +103,7 @@ export type Database = {
       payment_history: {
         Row: {
           amount: number
+          clinic_id: string | null
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
@@ -110,11 +111,13 @@ export type Database = {
           notes: string | null
           payment_method: string | null
           payment_proof_url: string | null
+          requested_plan_id: string | null
           status: string
           subscription_id: string
         }
         Insert: {
           amount: number
+          clinic_id?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
@@ -122,11 +125,13 @@ export type Database = {
           notes?: string | null
           payment_method?: string | null
           payment_proof_url?: string | null
+          requested_plan_id?: string | null
           status?: string
           subscription_id: string
         }
         Update: {
           amount?: number
+          clinic_id?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
@@ -134,10 +139,25 @@ export type Database = {
           notes?: string | null
           payment_method?: string | null
           payment_proof_url?: string | null
+          requested_plan_id?: string | null
           status?: string
           subscription_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "payment_history_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_history_requested_plan_id_fkey"
+            columns: ["requested_plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payment_history_subscription_id_fkey"
             columns: ["subscription_id"]
