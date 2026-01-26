@@ -45,11 +45,14 @@ import { mockInventoryProducts, mockInventoryMovements } from '@/data/mockInvent
 import { InventoryProduct, InventoryMovement, inventoryCategoryLabels, movementTypeLabels } from '@/types/inventory';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { FeatureButton } from '@/components/subscription/FeatureButton';
+import { useFeatureAccess } from '@/components/subscription/FeatureAction';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 export default function Inventory() {
+  const { canAccess: canModifyStock } = useFeatureAccess('estoque');
   const [products, setProducts] = useState<InventoryProduct[]>(mockInventoryProducts);
   const [movements, setMovements] = useState<InventoryMovement[]>(mockInventoryMovements);
   const [searchTerm, setSearchTerm] = useState('');
@@ -155,10 +158,10 @@ export default function Inventory() {
             </h1>
             <p className="text-muted-foreground">Gerencie os produtos e movimentações</p>
           </div>
-          <Button>
+          <FeatureButton feature="estoque">
             <Plus className="mr-2 h-4 w-4" />
             Novo Produto
-          </Button>
+          </FeatureButton>
         </div>
 
         {/* Stats Cards */}
@@ -312,7 +315,8 @@ export default function Inventory() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          <Button
+                          <FeatureButton
+                            feature="estoque"
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-emerald-600"
@@ -320,8 +324,9 @@ export default function Inventory() {
                             title="Entrada"
                           >
                             <ArrowDownToLine className="h-4 w-4" />
-                          </Button>
-                          <Button
+                          </FeatureButton>
+                          <FeatureButton
+                            feature="estoque"
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-red-600"
@@ -329,10 +334,10 @@ export default function Inventory() {
                             title="Saída"
                           >
                             <ArrowUpFromLine className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          </FeatureButton>
+                          <FeatureButton feature="estoque" variant="ghost" size="icon" className="h-8 w-8">
                             <Edit className="h-4 w-4" />
-                          </Button>
+                          </FeatureButton>
                         </div>
                       </TableCell>
                     </TableRow>

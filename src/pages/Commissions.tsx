@@ -7,7 +7,6 @@ import {
   Building2,
   Percent,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -25,6 +24,7 @@ import { CommissionRule } from '@/types/commission';
 import { mockCommissionRules, mockCommissionCalculations } from '@/data/mockCommissions';
 import { mockClinics } from '@/data/mockClinics';
 import { toast } from 'sonner';
+import { FeatureButton } from '@/components/subscription/FeatureButton';
 
 export default function Commissions() {
   const [rules, setRules] = useState<CommissionRule[]>(mockCommissionRules);
@@ -119,10 +119,10 @@ export default function Commissions() {
               Configure regras de comissionamento por profissional, procedimento e dia
             </p>
           </div>
-          <Button onClick={handleOpenNewRule}>
+          <FeatureButton feature="comissoes" onClick={handleOpenNewRule}>
             <Plus className="mr-2 h-4 w-4" />
             Nova Regra
-          </Button>
+          </FeatureButton>
         </div>
 
         {/* Filters */}
