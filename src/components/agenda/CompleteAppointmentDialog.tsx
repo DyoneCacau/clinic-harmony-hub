@@ -11,6 +11,8 @@ import {
   Calculator,
   XCircle,
   ShieldAlert,
+  Users,
+  TrendingUp,
 } from 'lucide-react';
 import {
   Dialog,
@@ -34,11 +36,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AgendaAppointment } from '@/types/agenda';
+import { AgendaAppointment, leadSourceLabels } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
-import { CommissionRule } from '@/types/commission';
+import { CommissionRule, beneficiaryTypeLabels, calculationUnitLabels } from '@/types/commission';
 import {
-  findApplicableRule,
+  findApplicableRules,
   calculateCommissionAmount,
   getProcedurePrice,
   formatCommissionInfo,
@@ -56,7 +58,7 @@ interface CompleteAppointmentDialogProps {
     appointment: AgendaAppointment,
     serviceValue: number,
     paymentMethod: PaymentMethod,
-    commissionAmount: number | null
+    quantity: number
   ) => void;
 }
 
@@ -71,8 +73,9 @@ export function CompleteAppointmentDialog({
 }: CompleteAppointmentDialogProps) {
   const [serviceValue, setServiceValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [applicableRule, setApplicableRule] = useState<CommissionRule | null>(null);
-  const [commissionAmount, setCommissionAmount] = useState<number>(0);
+  const [quantity, setQuantity] = useState(1);
+  const [applicableRules, setApplicableRules] = useState<CommissionRule[]>([]);
+  const [commissionBreakdown, setCommissionBreakdown] = useState<{rule: CommissionRule; amount: number}[]>([]);
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true });
   const [proceedWithoutRule, setProceedWithoutRule] = useState(false);
 
@@ -80,6 +83,7 @@ export function CompleteAppointmentDialog({
     if (appointment) {
       // Reset states
       setProceedWithoutRule(false);
+      setQuantity(1);
       
       // Validate appointment completion
       const validationResult = validateAppointmentCompletion(
@@ -97,29 +101,35 @@ export function CompleteAppointmentDialog({
       );
       setServiceValue(suggestedPrice);
 
-      // Find applicable commission rule
-      const rule = findApplicableRule(
+      // Find ALL applicable commission rules (professional + seller + reception)
+      const rules = findApplicableRules(
         mockCommissionRules,
         appointment.professional.id,
         appointment.clinic.id,
         appointment.procedure,
-        new Date(appointment.date)
+        new Date(appointment.date),
+        appointment.sellerId
       );
-      setApplicableRule(rule);
+      setApplicableRules(rules);
 
-      if (rule) {
-        setCommissionAmount(calculateCommissionAmount(rule, suggestedPrice));
-      } else {
-        setCommissionAmount(0);
-      }
+      // Calculate breakdown
+      const breakdown = rules.map(rule => ({
+        rule,
+        amount: calculateCommissionAmount(rule, suggestedPrice, 1)
+      }));
+      setCommissionBreakdown(breakdown);
     }
   }, [appointment]);
 
   useEffect(() => {
-    if (applicableRule && serviceValue > 0) {
-      setCommissionAmount(calculateCommissionAmount(applicableRule, serviceValue));
+    if (applicableRules.length > 0 && serviceValue > 0) {
+      const breakdown = applicableRules.map(rule => ({
+        rule,
+        amount: calculateCommissionAmount(rule, serviceValue, quantity)
+      }));
+      setCommissionBreakdown(breakdown);
     }
-  }, [serviceValue, applicableRule]);
+  }, [serviceValue, quantity, applicableRules]);
 
   const canComplete = () => {
     // If duplicate, never allow
@@ -138,25 +148,30 @@ export function CompleteAppointmentDialog({
       appointment,
       serviceValue,
       paymentMethod,
-      applicableRule ? commissionAmount : null
+      quantity
     );
     onOpenChange(false);
   };
 
   if (!appointment) return null;
 
-  const netValue = serviceValue - commissionAmount;
+  const totalCommission = commissionBreakdown.reduce((sum, item) => sum + item.amount, 0);
+  const netValue = serviceValue - totalCommission;
+  const hasProfessionalRule = commissionBreakdown.some(b => b.rule.beneficiaryType === 'professional');
+
+  // Check if procedure requires quantity input (ml, arch, unit, session)
+  const needsQuantity = applicableRules.some(r => r.calculationUnit !== 'appointment');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-emerald-600" />
             Finalizar Atendimento
           </DialogTitle>
           <DialogDescription>
-            Registre o pagamento e calcule a comissão do profissional
+            Registre o pagamento e calcule as comissões
           </DialogDescription>
         </DialogHeader>
 
@@ -198,6 +213,25 @@ export function CompleteAppointmentDialog({
                 })}{' '}
                 às {appointment.startTime}
               </div>
+              {/* Seller and Lead Source info */}
+              {(appointment.sellerName || appointment.leadSource) && (
+                <div className="flex items-center gap-4 pt-2 border-t border-border/50 text-xs">
+                  {appointment.sellerName && (
+                    <div className="flex items-center gap-1">
+                      <Users className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Vendedor:</span>
+                      <span className="font-medium">{appointment.sellerName}</span>
+                    </div>
+                  )}
+                  {appointment.leadSource && (
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Origem:</span>
+                      <span className="font-medium">{leadSourceLabels[appointment.leadSource]}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -205,23 +239,40 @@ export function CompleteAppointmentDialog({
 
           {/* Payment Info */}
           <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="serviceValue">Valor do Atendimento</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  R$
-                </span>
-                <Input
-                  id="serviceValue"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={serviceValue}
-                  onChange={(e) => setServiceValue(parseFloat(e.target.value) || 0)}
-                  className="pl-10"
-                  disabled={validation.errorCode === 'DUPLICATE'}
-                />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="serviceValue">Valor do Atendimento</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    R$
+                  </span>
+                  <Input
+                    id="serviceValue"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={serviceValue}
+                    onChange={(e) => setServiceValue(parseFloat(e.target.value) || 0)}
+                    className="pl-10"
+                    disabled={validation.errorCode === 'DUPLICATE'}
+                  />
+                </div>
               </div>
+
+              {needsQuantity && (
+                <div className="grid gap-2">
+                  <Label htmlFor="quantity">Quantidade/Unidades</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={quantity}
+                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    disabled={validation.errorCode === 'DUPLICATE'}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -251,48 +302,63 @@ export function CompleteAppointmentDialog({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Calculator className="h-4 w-4 text-primary" />
-              <span className="font-medium">Cálculo de Comissão</span>
+              <span className="font-medium">Cálculo de Comissões</span>
+              {commissionBreakdown.length > 0 && (
+                <Badge variant="secondary" className="ml-auto">
+                  {commissionBreakdown.length} regra(s)
+                </Badge>
+              )}
             </div>
 
-            {applicableRule ? (
+            {commissionBreakdown.length > 0 ? (
               <Card className="border-primary/20 bg-primary/5">
                 <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Regra aplicada:</span>
-                    <Badge variant="secondary">
-                      {applicableRule.calculationType === 'percentage' ? (
-                        <Percent className="mr-1 h-3 w-3" />
-                      ) : (
-                        <DollarSign className="mr-1 h-3 w-3" />
-                      )}
-                      {formatCommissionInfo(applicableRule)}
-                    </Badge>
+                  {/* Individual commission breakdowns */}
+                  <div className="space-y-2">
+                    {commissionBreakdown.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between text-sm p-2 rounded-lg bg-background">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {beneficiaryTypeLabels[item.rule.beneficiaryType]}
+                          </Badge>
+                          <span className="text-muted-foreground">
+                            {item.rule.beneficiaryName || appointment.professional.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {item.rule.calculationType === 'percentage' 
+                              ? `${item.rule.value}%` 
+                              : `R$ ${item.rule.value}/${calculationUnitLabels[item.rule.calculationUnit]?.split(' ')[1] || 'atend.'}`
+                            }
+                          </span>
+                          <span className="font-semibold text-amber-700">
+                            {formatCurrency(item.amount)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  {/* Summary */}
+                  <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t">
                     <div className="p-2 rounded-lg bg-background">
-                      <p className="text-xs text-muted-foreground">Valor</p>
+                      <p className="text-xs text-muted-foreground">Valor Bruto</p>
                       <p className="font-semibold text-sm">{formatCurrency(serviceValue)}</p>
                     </div>
                     <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
-                      <p className="text-xs text-amber-700">Comissão</p>
+                      <p className="text-xs text-amber-700">Total Comissões</p>
                       <p className="font-semibold text-sm text-amber-700">
-                        {formatCurrency(commissionAmount)}
+                        {formatCurrency(totalCommission)}
                       </p>
                     </div>
                     <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200">
-                      <p className="text-xs text-emerald-700">Líquido</p>
+                      <p className="text-xs text-emerald-700">Líquido Clínica</p>
                       <p className="font-semibold text-sm text-emerald-700">
                         {formatCurrency(netValue)}
                       </p>
                     </div>
                   </div>
-
-                  {applicableRule.notes && (
-                    <p className="text-xs text-muted-foreground italic">
-                      {applicableRule.notes}
-                    </p>
-                  )}
                 </CardContent>
               </Card>
             ) : (

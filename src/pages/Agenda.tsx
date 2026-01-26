@@ -86,10 +86,17 @@ export default function Agenda() {
     appointment: AgendaAppointment,
     serviceValue: number,
     paymentMethod: PaymentMethod,
-    commissionAmount: number | null
+    quantity: number
   ) => {
-    // Generate financial entries
-    const result = completeAppointment(appointment, serviceValue, paymentMethod);
+    // Generate financial entries with seller from appointment
+    const result = completeAppointment(
+      appointment, 
+      serviceValue, 
+      paymentMethod,
+      undefined, // use default rules
+      quantity,
+      appointment.sellerId
+    );
 
     // Add to shared state (in real app, save to database)
     financialTransactions.push(result.incomeTransaction);
@@ -110,8 +117,9 @@ export default function Agenda() {
     );
 
     // Show success with details
-    const commissionInfo = commissionAmount
-      ? ` | Comissão: R$ ${commissionAmount.toFixed(2)}`
+    const totalCommission = result.commissions.reduce((sum, c) => sum + c.commissionAmount, 0);
+    const commissionInfo = totalCommission > 0
+      ? ` | Comissões: R$ ${totalCommission.toFixed(2)} (${result.commissions.length} beneficiário(s))`
       : '';
     toast.success(
       `Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}${commissionInfo}`

@@ -15,7 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Users, DollarSign, Percent, TrendingUp, Clock, CheckCircle } from 'lucide-react';
+import { Users, DollarSign, Percent, TrendingUp, Clock, CheckCircle, Instagram, MessageCircle, Share2, Megaphone, HelpCircle } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -29,7 +29,8 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { CommissionSummary, CommissionCalculation } from '@/types/commission';
+import { CommissionSummary, CommissionCalculation, beneficiaryTypeLabels } from '@/types/commission';
+import { leadSourceLabels, LeadSource } from '@/types/agenda';
 import { generateCommissionSummary } from '@/data/mockCommissions';
 
 interface CommissionReportProps {
@@ -40,6 +41,14 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+const leadSourceIcons: Record<LeadSource, typeof Instagram> = {
+  instagram: Instagram,
+  whatsapp: MessageCircle,
+  referral: Share2,
+  paid_traffic: Megaphone,
+  other: HelpCircle,
+};
 
 export function CommissionReport({ calculations }: CommissionReportProps) {
   const summary = useMemo(() => generateCommissionSummary(calculations), [calculations]);
@@ -53,6 +62,27 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
       totalServices: summary.reduce((acc, s) => acc + s.totalServices, 0),
     };
   }, [summary]);
+
+  // Lead source breakdown
+  const leadSourceStats = useMemo(() => {
+    const stats: Record<string, { count: number; revenue: number; commission: number }> = {};
+    calculations.forEach(calc => {
+      const source = calc.leadSource || 'other';
+      if (!stats[source]) {
+        stats[source] = { count: 0, revenue: 0, commission: 0 };
+      }
+      if (calc.beneficiaryType === 'professional') {
+        stats[source].count++;
+        stats[source].revenue += calc.serviceValue;
+      }
+      stats[source].commission += calc.commissionAmount;
+    });
+    return Object.entries(stats).map(([source, data]) => ({
+      name: leadSourceLabels[source as LeadSource] || source,
+      source: source as LeadSource,
+      ...data,
+    }));
+  }, [calculations]);
 
   const chartData = summary.map((s) => ({
     name: s.professionalName.split(' ').slice(0, 2).join(' '),
@@ -221,16 +251,50 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
         </CardContent>
       </Card>
 
+      {/* Lead Source Analysis */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Análise por Origem do Lead
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {leadSourceStats.map((stat) => {
+              const Icon = leadSourceIcons[stat.source] || HelpCircle;
+              return (
+                <div key={stat.source} className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">{stat.name}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      {stat.count} atendimento(s)
+                    </p>
+                    <p className="text-sm font-semibold">
+                      {formatCurrency(stat.revenue)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Detailed Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Resumo por Profissional</CardTitle>
+          <CardTitle className="text-lg">Resumo por Beneficiário</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Profissional</TableHead>
+                <TableHead>Beneficiário</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead className="text-center">Atendimentos</TableHead>
                 <TableHead className="text-right">Faturamento</TableHead>
                 <TableHead className="text-right">Comissão Total</TableHead>
@@ -243,6 +307,11 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
               {summary.map((s) => (
                 <TableRow key={s.professionalId}>
                   <TableCell className="font-medium">{s.professionalName}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {beneficiaryTypeLabels[s.beneficiaryType]}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-center">
                     <Badge variant="outline">{s.totalServices}</Badge>
                   </TableCell>
@@ -263,6 +332,7 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
               ))}
               <TableRow className="bg-muted/50 font-semibold">
                 <TableCell>Total</TableCell>
+                <TableCell></TableCell>
                 <TableCell className="text-center">{totals.totalServices}</TableCell>
                 <TableCell className="text-right">{formatCurrency(totals.totalRevenue)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(totals.totalCommission)}</TableCell>

@@ -1,38 +1,48 @@
-import { AgendaAppointment, Professional } from '@/types/agenda';
+import { AgendaAppointment, Professional, LeadSource } from '@/types/agenda';
 import { mockClinics } from './mockClinics';
+import { mockStaffMembers } from './mockCommissions';
 
+// Only dentistry professionals
 export const mockProfessionals: Professional[] = [
   {
     id: 'prof1',
     name: 'Dr. Carlos Oliveira',
-    specialty: 'Clínico Geral',
-    crm: '123456-SP',
+    specialty: 'Implantodontia',
+    cro: '123456-SP',
   },
   {
     id: 'prof2',
     name: 'Dra. Ana Costa',
-    specialty: 'Odontologia',
+    specialty: 'Ortodontia',
     cro: '654321-SP',
   },
   {
     id: 'prof3',
     name: 'Dra. Carla Mendes',
-    specialty: 'Cardiologia',
-    crm: '789012-SP',
+    specialty: 'Endodontia',
+    cro: '789012-SP',
   },
   {
     id: 'prof4',
     name: 'Dr. Paulo Ferreira',
-    specialty: 'Endocrinologia',
-    crm: '345678-SP',
+    specialty: 'Periodontia',
+    cro: '345678-SP',
   },
   {
     id: 'prof5',
     name: 'Dra. Marina Costa',
-    specialty: 'Odontologia',
+    specialty: 'Odontopediatria',
     cro: '901234-SP',
   },
 ];
+
+// Get sellers for appointments
+const getSeller = (index: number) => {
+  const sellers = mockStaffMembers.filter(s => s.role === 'seller');
+  return sellers[index % sellers.length];
+};
+
+const leadSources: LeadSource[] = ['instagram', 'whatsapp', 'referral', 'paid_traffic', 'other'];
 
 const today = new Date();
 const formatDate = (date: Date) => date.toISOString().split('T')[0];
@@ -54,10 +64,13 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     patientId: '1',
     patientName: 'Maria Silva Santos',
     professional: mockProfessionals[0],
-    procedure: 'Consulta Geral',
+    procedure: 'Avaliação Inicial',
     status: 'confirmed',
     paymentStatus: 'paid',
     clinic: mockClinics[0],
+    sellerId: getSeller(0).id,
+    sellerName: getSeller(0).name,
+    leadSource: 'instagram',
   },
   {
     id: 'ag2',
@@ -71,6 +84,9 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     status: 'pending',
     paymentStatus: 'pending',
     clinic: mockClinics[1],
+    sellerId: getSeller(1).id,
+    sellerName: getSeller(1).name,
+    leadSource: 'whatsapp',
   },
   {
     id: 'ag3',
@@ -97,6 +113,9 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     status: 'confirmed',
     paymentStatus: 'pending',
     clinic: mockClinics[1],
+    sellerId: getSeller(0).id,
+    sellerName: getSeller(0).name,
+    leadSource: 'paid_traffic',
   },
   {
     id: 'ag5',
@@ -105,11 +124,14 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     endTime: '14:30',
     patientId: '5',
     patientName: 'Fernanda Costa Souza',
-    professional: mockProfessionals[0],
-    procedure: 'Consulta Pré-Natal',
+    professional: mockProfessionals[2],
+    procedure: 'Tratamento de Canal',
     status: 'confirmed',
     paymentStatus: 'paid',
     clinic: mockClinics[2],
+    sellerId: getSeller(2).id,
+    sellerName: getSeller(2).name,
+    leadSource: 'referral',
   },
   {
     id: 'ag6',
@@ -118,10 +140,53 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     endTime: '15:30',
     patientId: '1',
     patientName: 'Maria Silva Santos',
-    professional: mockProfessionals[2],
-    procedure: 'Ecocardiograma',
+    professional: mockProfessionals[3],
+    procedure: 'Tratamento Periodontal',
     status: 'pending',
     paymentStatus: 'pending',
+    clinic: mockClinics[0],
+  },
+  // Tomorrow's appointments
+  {
+    id: 'ag7',
+    date: getDateOffset(1),
+    startTime: '08:30',
+    endTime: '09:00',
+    patientId: '2',
+    patientName: 'João Pedro Oliveira',
+    professional: mockProfessionals[3],
+    procedure: 'Retorno',
+    status: 'confirmed',
+    paymentStatus: 'pending',
+    clinic: mockClinics[2],
+  },
+  {
+    id: 'ag8',
+    date: getDateOffset(1),
+    startTime: '10:00',
+    endTime: '10:30',
+    patientId: '3',
+    patientName: 'Ana Clara Rodrigues',
+    professional: mockProfessionals[4],
+    procedure: 'Clareamento',
+    status: 'pending',
+    paymentStatus: 'pending',
+    clinic: mockClinics[1],
+    sellerId: getSeller(1).id,
+    sellerName: getSeller(1).name,
+    leadSource: 'instagram',
+  },
+  {
+    id: 'ag9',
+    date: getDateOffset(1),
+    startTime: '14:00',
+    endTime: '14:30',
+    patientId: '5',
+    patientName: 'Fernanda Costa Souza',
+    professional: mockProfessionals[0],
+    procedure: 'Retorno',
+    status: 'return',
+    paymentStatus: 'paid',
     clinic: mockClinics[0],
   },
   // Tomorrow's appointments
@@ -173,10 +238,13 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     patientId: '4',
     patientName: 'Carlos Eduardo Lima',
     professional: mockProfessionals[1],
-    procedure: 'Extração',
+    procedure: 'Extração Simples',
     status: 'confirmed',
     paymentStatus: 'pending',
     clinic: mockClinics[1],
+    sellerId: getSeller(1).id,
+    sellerName: getSeller(1).name,
+    leadSource: 'other',
   },
   {
     id: 'ag11',
@@ -186,7 +254,7 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     patientId: '1',
     patientName: 'Maria Silva Santos',
     professional: mockProfessionals[2],
-    procedure: 'Retorno Cardiológico',
+    procedure: 'Retorno Canal',
     status: 'return',
     paymentStatus: 'paid',
     clinic: mockClinics[0],
@@ -200,10 +268,13 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     patientId: '2',
     patientName: 'João Pedro Oliveira',
     professional: mockProfessionals[0],
-    procedure: 'Consulta Geral',
+    procedure: 'Implante Unitário',
     status: 'confirmed',
     paymentStatus: 'paid',
     clinic: mockClinics[0],
+    sellerId: getSeller(0).id,
+    sellerName: getSeller(0).name,
+    leadSource: 'paid_traffic',
   },
   {
     id: 'ag13',
@@ -213,7 +284,7 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     patientId: '3',
     patientName: 'Ana Clara Rodrigues',
     professional: mockProfessionals[4],
-    procedure: 'Revisão',
+    procedure: 'Revisão Odontopediátrica',
     status: 'pending',
     paymentStatus: 'pending',
     clinic: mockClinics[1],
@@ -226,9 +297,12 @@ export const mockAgendaAppointments: AgendaAppointment[] = [
     patientId: '5',
     patientName: 'Fernanda Costa Souza',
     professional: mockProfessionals[0],
-    procedure: 'Ultrassom',
+    procedure: 'Prótese Unitária',
     status: 'confirmed',
     paymentStatus: 'paid',
     clinic: mockClinics[2],
+    sellerId: getSeller(2).id,
+    sellerName: getSeller(2).name,
+    leadSource: 'referral',
   },
 ];

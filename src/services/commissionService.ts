@@ -114,7 +114,8 @@ export function findApplicableRules(
   professionalId: string,
   clinicId: string,
   procedure: string,
-  date: Date
+  date: Date,
+  sellerId?: string
 ): CommissionRule[] {
   const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
     date.getDay()
@@ -126,14 +127,23 @@ export function findApplicableRules(
       if (!rule.isActive) return false;
       if (rule.clinicId !== clinicId) return false;
 
-      // Check professional match
-      if (rule.professionalId !== 'all' && rule.professionalId !== professionalId) return false;
+      // Check professional match (for professional type rules)
+      if (rule.beneficiaryType === 'professional') {
+        if (rule.professionalId !== 'all' && rule.professionalId !== professionalId) return false;
+      }
 
       // Check procedure match
       if (rule.procedure !== 'all' && rule.procedure !== procedure) return false;
 
       // Check day of week match
       if (rule.dayOfWeek !== 'all' && rule.dayOfWeek !== dayOfWeek) return false;
+
+      // For seller rules, only include if seller is assigned
+      if (rule.beneficiaryType === 'seller') {
+        if (!sellerId) return false;
+        // Either a general seller rule or specific to this seller
+        if (rule.beneficiaryId && rule.beneficiaryId !== sellerId) return false;
+      }
 
       return true;
     })
@@ -228,13 +238,17 @@ export function completeAppointment(
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = now.toTimeString().slice(0, 5);
 
-  // Find all applicable commission rules
+  // Use seller from appointment if not provided explicitly
+  const effectiveSellerId = sellerId || appointment.sellerId;
+
+  // Find all applicable commission rules (now with seller)
   const applicableRules = findApplicableRules(
     rules,
     appointment.professional.id,
     appointment.clinic.id,
     appointment.procedure,
-    appointmentDate
+    appointmentDate,
+    effectiveSellerId
   );
 
   // Create income transaction
@@ -247,11 +261,11 @@ export function completeAppointment(
     patientId: appointment.patientId,
     patientName: appointment.patientName,
     appointmentId: appointment.id,
-    category: 'Procedimento',
+    category: 'Procedimento Odontológico',
     date: dateStr,
     time: timeStr,
     userId: 'user1',
-    userName: 'Recepcionista Ana',
+    userName: 'Recepcionista',
   };
 
   const commissions: CommissionCalculation[] = [];
@@ -259,7 +273,7 @@ export function completeAppointment(
 
   applicableRules.forEach((rule, index) => {
     // Skip staff rules if no staff is assigned
-    if (rule.beneficiaryType === 'seller' && !sellerId && !rule.beneficiaryId) return;
+    if (rule.beneficiaryType === 'seller' && !effectiveSellerId && !rule.beneficiaryId) return;
     if (rule.beneficiaryType === 'reception' && !receptionistId && !rule.beneficiaryId) return;
 
     const commissionAmount = calculateCommissionAmount(rule, serviceValue, quantity);
@@ -268,17 +282,17 @@ export function completeAppointment(
     let beneficiaryId = rule.beneficiaryId;
     let beneficiaryName = rule.beneficiaryName;
     
-    if (rule.beneficiaryType === 'seller' && sellerId) {
-      const seller = mockStaffMembers.find(s => s.id === sellerId);
-      beneficiaryId = sellerId;
-      beneficiaryName = seller?.name || 'Vendedor';
+    if (rule.beneficiaryType === 'seller' && effectiveSellerId) {
+      const seller = mockStaffMembers.find(s => s.id === effectiveSellerId);
+      beneficiaryId = effectiveSellerId;
+      beneficiaryName = seller?.name || appointment.sellerName || 'Vendedor';
     } else if (rule.beneficiaryType === 'reception' && receptionistId) {
       const receptionist = mockStaffMembers.find(s => s.id === receptionistId);
       beneficiaryId = receptionistId;
       beneficiaryName = receptionist?.name || 'Recepcionista';
     }
 
-    // Create commission calculation record
+    // Create commission calculation record with seller and lead info
     const commission: CommissionCalculation = {
       id: `calc${Date.now()}_${index}`,
       appointmentId: appointment.id,
@@ -299,6 +313,10 @@ export function completeAppointment(
       commissionAmount,
       date: dateStr,
       status: 'pending',
+      // Track seller and lead source
+      sellerId: appointment.sellerId,
+      sellerName: appointment.sellerName,
+      leadSource: appointment.leadSource,
     };
     
     commissions.push(commission);
