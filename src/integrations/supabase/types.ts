@@ -100,6 +100,234 @@ export type Database = {
         }
         Relationships: []
       }
+      commissions: {
+        Row: {
+          amount: number
+          appointment_id: string | null
+          base_value: number | null
+          beneficiary_id: string
+          beneficiary_type: string
+          clinic_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          paid_at: string | null
+          paid_by: string | null
+          percentage: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          appointment_id?: string | null
+          base_value?: number | null
+          beneficiary_id: string
+          beneficiary_type: string
+          clinic_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          percentage?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string | null
+          base_value?: number | null
+          beneficiary_id?: string
+          beneficiary_type?: string
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          percentage?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commissions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_transactions: {
+        Row: {
+          amount: number
+          category: string | null
+          clinic_id: string
+          created_at: string
+          description: string | null
+          id: string
+          payment_method: string | null
+          reference_id: string | null
+          reference_type: string | null
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          clinic_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          payment_method?: string | null
+          reference_id?: string | null
+          reference_type?: string | null
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          clinic_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          payment_method?: string | null
+          reference_id?: string | null
+          reference_type?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_transactions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_movements: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          id: string
+          new_stock: number
+          notes: string | null
+          previous_stock: number
+          product_id: string
+          quantity: number
+          reason: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          id?: string
+          new_stock: number
+          notes?: string | null
+          previous_stock: number
+          product_id: string
+          quantity: number
+          reason?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          new_stock?: number
+          notes?: string | null
+          previous_stock?: number
+          product_id?: string
+          quantity?: number
+          reason?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_products: {
+        Row: {
+          category: string | null
+          clinic_id: string
+          cost_price: number | null
+          created_at: string
+          current_stock: number
+          description: string | null
+          id: string
+          is_active: boolean | null
+          minimum_stock: number | null
+          name: string
+          sale_price: number | null
+          sku: string | null
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          clinic_id: string
+          cost_price?: number | null
+          created_at?: string
+          current_stock?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          minimum_stock?: number | null
+          name: string
+          sale_price?: number | null
+          sku?: string | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          clinic_id?: string
+          cost_price?: number | null
+          created_at?: string
+          current_stock?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          minimum_stock?: number | null
+          name?: string
+          sale_price?: number | null
+          sku?: string | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_products_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_history: {
         Row: {
           amount: number
@@ -442,6 +670,11 @@ export type Database = {
     }
     Functions: {
       get_user_clinic_id: { Args: { _user_id: string }; Returns: string }
+      get_user_subscription_status: {
+        Args: { _user_id: string }
+        Returns: string
+      }
+      has_active_subscription: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -451,6 +684,10 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin: { Args: { _user_id: string }; Returns: boolean }
+      user_has_feature: {
+        Args: { _feature: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role:
