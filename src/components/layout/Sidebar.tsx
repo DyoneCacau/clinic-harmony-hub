@@ -18,6 +18,7 @@ import {
   Clock,
   FileText,
   Crown,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,20 +28,28 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { useSubscription, ROUTE_FEATURE_MAP } from "@/hooks/useSubscription";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Calendar, label: "Agenda", path: "/agenda" },
-  { icon: Users, label: "Pacientes", path: "/pacientes" },
-  { icon: Stethoscope, label: "Profissionais", path: "/profissionais" },
-  { icon: DollarSign, label: "Financeiro", path: "/financeiro" },
-  { icon: Percent, label: "Comissões", path: "/comissoes" },
-  { icon: Clock, label: "Ponto", path: "/ponto" },
-  { icon: FileText, label: "Termos", path: "/termos" },
-  { icon: Package, label: "Estoque", path: "/estoque" },
-  { icon: FileBarChart, label: "Relatórios", path: "/relatorios" },
-  { icon: Shield, label: "Administração", path: "/administracao" },
-  { icon: Settings, label: "Configurações", path: "/configuracoes" },
+interface MenuItem {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  path: string;
+  feature?: string;
+}
+
+const menuItems: MenuItem[] = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/", feature: "dashboard" },
+  { icon: Calendar, label: "Agenda", path: "/agenda", feature: "agenda" },
+  { icon: Users, label: "Pacientes", path: "/pacientes", feature: "pacientes" },
+  { icon: Stethoscope, label: "Profissionais", path: "/profissionais", feature: "profissionais" },
+  { icon: DollarSign, label: "Financeiro", path: "/financeiro", feature: "financeiro" },
+  { icon: Percent, label: "Comissões", path: "/comissoes", feature: "comissoes" },
+  { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
+  { icon: FileText, label: "Termos", path: "/termos", feature: "termos" },
+  { icon: Package, label: "Estoque", path: "/estoque", feature: "estoque" },
+  { icon: FileBarChart, label: "Relatórios", path: "/relatorios", feature: "relatorios" },
+  { icon: Shield, label: "Administração", path: "/administracao", feature: "administracao" },
+  { icon: Settings, label: "Configurações", path: "/configuracoes", feature: "configuracoes" },
 ];
 
 export function Sidebar() {
@@ -48,6 +57,7 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isSuperAdmin, profile, signOut } = useAuth();
+  const { hasFeature } = useSubscription();
 
   const handleLogout = async () => {
     await signOut();
@@ -124,6 +134,45 @@ export function Sidebar() {
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
+            const isLocked = item.feature && !hasFeature(item.feature);
+
+            // Se está bloqueado e não é superadmin, mostra como desabilitado
+            if (isLocked && !isSuperAdmin) {
+              const lockedContent = (
+                <div
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    "text-sidebar-muted cursor-not-allowed opacity-50"
+                  )}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1">{item.label}</span>
+                      <Lock className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </div>
+              );
+
+              if (collapsed) {
+                return (
+                  <li key={item.path}>
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>{lockedContent}</TooltipTrigger>
+                      <TooltipContent side="right" className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <Lock className="h-3 w-3" />
+                          {item.label} (Bloqueado)
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </li>
+                );
+              }
+
+              return <li key={item.path}>{lockedContent}</li>;
+            }
 
             const linkContent = (
               <Link

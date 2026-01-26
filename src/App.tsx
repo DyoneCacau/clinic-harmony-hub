@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { SubscriptionProvider, useSubscription } from "@/hooks/useSubscription";
+import { TrialExpiredScreen } from "@/components/subscription/TrialExpiredScreen";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Patients from "./pages/Patients";
@@ -39,6 +41,30 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function SubscriptionGate({ children }: { children: React.ReactNode }) {
+  const { isBlocked, isLoading } = useSubscription();
+  const { isSuperAdmin } = useAuth();
+
+  // SuperAdmin nunca é bloqueado
+  if (isSuperAdmin) {
+    return <>{children}</>;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (isBlocked) {
+    return <TrialExpiredScreen />;
+  }
+
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -47,7 +73,9 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <Index />
+            <SubscriptionGate>
+              <Index />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -55,7 +83,9 @@ function AppRoutes() {
         path="/pacientes"
         element={
           <ProtectedRoute>
-            <Patients />
+            <SubscriptionGate>
+              <Patients />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -63,7 +93,9 @@ function AppRoutes() {
         path="/agenda"
         element={
           <ProtectedRoute>
-            <Agenda />
+            <SubscriptionGate>
+              <Agenda />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -71,7 +103,9 @@ function AppRoutes() {
         path="/financeiro"
         element={
           <ProtectedRoute>
-            <Financial />
+            <SubscriptionGate>
+              <Financial />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -79,7 +113,9 @@ function AppRoutes() {
         path="/termos"
         element={
           <ProtectedRoute>
-            <Terms />
+            <SubscriptionGate>
+              <Terms />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -87,7 +123,9 @@ function AppRoutes() {
         path="/relatorios"
         element={
           <ProtectedRoute>
-            <Reports />
+            <SubscriptionGate>
+              <Reports />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -95,7 +133,9 @@ function AppRoutes() {
         path="/comissoes"
         element={
           <ProtectedRoute>
-            <Commissions />
+            <SubscriptionGate>
+              <Commissions />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -103,7 +143,9 @@ function AppRoutes() {
         path="/estoque"
         element={
           <ProtectedRoute>
-            <Inventory />
+            <SubscriptionGate>
+              <Inventory />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -111,7 +153,9 @@ function AppRoutes() {
         path="/profissionais"
         element={
           <ProtectedRoute>
-            <Professionals />
+            <SubscriptionGate>
+              <Professionals />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -119,7 +163,9 @@ function AppRoutes() {
         path="/ponto"
         element={
           <ProtectedRoute>
-            <TimeClock />
+            <SubscriptionGate>
+              <TimeClock />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
       />
@@ -127,19 +173,21 @@ function AppRoutes() {
         path="/administracao"
         element={
           <ProtectedRoute>
-            <Administration />
+            <SubscriptionGate>
+              <Administration />
+            </SubscriptionGate>
           </ProtectedRoute>
         }
-        />
-        <Route
-          path="/superadmin"
-          element={
-            <ProtectedRoute>
-              <SuperAdmin />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<NotFound />} />
+      />
+      <Route
+        path="/superadmin"
+        element={
+          <ProtectedRoute>
+            <SuperAdmin />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
@@ -151,7 +199,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <SubscriptionProvider>
+            <AppRoutes />
+          </SubscriptionProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
