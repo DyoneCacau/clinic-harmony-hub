@@ -93,12 +93,12 @@ export default function Agenda() {
 
     // Add to shared state (in real app, save to database)
     financialTransactions.push(result.incomeTransaction);
-    if (result.commissionTransaction) {
-      financialTransactions.push(result.commissionTransaction);
-    }
-    if (result.commission) {
-      commissionCalculations.push(result.commission);
-    }
+    result.commissionTransactions.forEach(tx => {
+      financialTransactions.push(tx);
+    });
+    result.commissions.forEach(comm => {
+      commissionCalculations.push(comm);
+    });
 
     // Update appointment status
     setAppointments((prev) =>

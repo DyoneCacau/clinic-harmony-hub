@@ -1,24 +1,24 @@
-import { CommissionRule, CommissionCalculation, CalculationType } from '@/types/commission';
+import { CommissionRule, CommissionCalculation, CalculationType, BeneficiaryType, calculateAutoPriority } from '@/types/commission';
 import { Transaction } from '@/types/financial';
 import { AgendaAppointment } from '@/types/agenda';
-import { mockCommissionRules, mockProcedurePrices } from '@/data/mockCommissions';
+import { mockCommissionRules, mockProcedurePrices, mockStaffMembers } from '@/data/mockCommissions';
 
 export interface CompleteAppointmentResult {
-  commission: CommissionCalculation | null;
+  commissions: CommissionCalculation[];
   incomeTransaction: Transaction;
-  commissionTransaction: Transaction | null;
+  commissionTransactions: Transaction[];
 }
 
 /**
- * Finds the best matching commission rule for an appointment
+ * Finds all applicable commission rules for an appointment (professional + staff)
  */
-export function findApplicableRule(
+export function findApplicableRules(
   rules: CommissionRule[],
   professionalId: string,
   clinicId: string,
   procedure: string,
   date: Date
-): CommissionRule | null {
+): CommissionRule[] {
   const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
     date.getDay()
   ] as CommissionRule['dayOfWeek'];
@@ -42,18 +42,49 @@ export function findApplicableRule(
     })
     .sort((a, b) => b.priority - a.priority);
 
-  return applicableRules[0] || null;
+  // Group by beneficiary type and get best rule for each
+  const rulesByBeneficiary = new Map<string, CommissionRule>();
+  
+  applicableRules.forEach(rule => {
+    const key = `${rule.beneficiaryType}-${rule.beneficiaryId || 'general'}`;
+    if (!rulesByBeneficiary.has(key)) {
+      rulesByBeneficiary.set(key, rule);
+    }
+  });
+
+  return Array.from(rulesByBeneficiary.values());
 }
 
 /**
- * Calculates commission amount based on the rule
+ * Legacy function for backward compatibility
+ */
+export function findApplicableRule(
+  rules: CommissionRule[],
+  professionalId: string,
+  clinicId: string,
+  procedure: string,
+  date: Date
+): CommissionRule | null {
+  const allRules = findApplicableRules(rules, professionalId, clinicId, procedure, date);
+  // Return the professional rule
+  return allRules.find(r => r.beneficiaryType === 'professional') || null;
+}
+
+/**
+ * Calculates commission amount based on the rule and quantity
  */
 export function calculateCommissionAmount(
   rule: CommissionRule,
-  serviceValue: number
+  serviceValue: number,
+  quantity: number = 1
 ): number {
   if (rule.calculationType === 'percentage') {
     return (serviceValue * rule.value) / 100;
+  }
+  
+  // Fixed value - multiply by quantity for unit-based calculations
+  if (rule.calculationUnit !== 'appointment') {
+    return rule.value * quantity;
   }
   return rule.value;
 }
@@ -84,20 +115,24 @@ export function getProcedurePrice(
 
 /**
  * Completes an appointment and generates all related financial entries
+ * Now supports multiple commissions (professional + seller + reception)
  */
 export function completeAppointment(
   appointment: AgendaAppointment,
   serviceValue: number,
   paymentMethod: Transaction['paymentMethod'],
-  rules: CommissionRule[] = mockCommissionRules
+  rules: CommissionRule[] = mockCommissionRules,
+  quantity: number = 1,
+  sellerId?: string,
+  receptionistId?: string
 ): CompleteAppointmentResult {
   const appointmentDate = new Date(appointment.date);
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = now.toTimeString().slice(0, 5);
 
-  // Find applicable commission rule
-  const rule = findApplicableRule(
+  // Find all applicable commission rules
+  const applicableRules = findApplicableRules(
     rules,
     appointment.professional.id,
     appointment.clinic.id,
@@ -122,50 +157,80 @@ export function completeAppointment(
     userName: 'Recepcionista Ana',
   };
 
-  let commission: CommissionCalculation | null = null;
-  let commissionTransaction: Transaction | null = null;
+  const commissions: CommissionCalculation[] = [];
+  const commissionTransactions: Transaction[] = [];
 
-  if (rule) {
-    const commissionAmount = calculateCommissionAmount(rule, serviceValue);
+  applicableRules.forEach((rule, index) => {
+    // Skip staff rules if no staff is assigned
+    if (rule.beneficiaryType === 'seller' && !sellerId && !rule.beneficiaryId) return;
+    if (rule.beneficiaryType === 'reception' && !receptionistId && !rule.beneficiaryId) return;
+
+    const commissionAmount = calculateCommissionAmount(rule, serviceValue, quantity);
+    
+    // Determine beneficiary info
+    let beneficiaryId = rule.beneficiaryId;
+    let beneficiaryName = rule.beneficiaryName;
+    
+    if (rule.beneficiaryType === 'seller' && sellerId) {
+      const seller = mockStaffMembers.find(s => s.id === sellerId);
+      beneficiaryId = sellerId;
+      beneficiaryName = seller?.name || 'Vendedor';
+    } else if (rule.beneficiaryType === 'reception' && receptionistId) {
+      const receptionist = mockStaffMembers.find(s => s.id === receptionistId);
+      beneficiaryId = receptionistId;
+      beneficiaryName = receptionist?.name || 'Recepcionista';
+    }
 
     // Create commission calculation record
-    commission = {
-      id: `calc${Date.now()}`,
+    const commission: CommissionCalculation = {
+      id: `calc${Date.now()}_${index}`,
       appointmentId: appointment.id,
       professionalId: appointment.professional.id,
       professionalName: appointment.professional.name,
+      beneficiaryType: rule.beneficiaryType,
+      beneficiaryId,
+      beneficiaryName,
       clinicId: appointment.clinic.id,
       clinicName: appointment.clinic.name,
       procedure: appointment.procedure,
       serviceValue,
+      quantity,
       commissionRuleId: rule.id,
       calculationType: rule.calculationType,
+      calculationUnit: rule.calculationUnit,
       ruleValue: rule.value,
       commissionAmount,
       date: dateStr,
       status: 'pending',
     };
+    
+    commissions.push(commission);
 
-    // Create commission expense transaction (to be paid to professional)
-    commissionTransaction = {
-      id: `tr${Date.now() + 1}`,
+    // Create commission expense transaction
+    const displayName = beneficiaryName || appointment.professional.name;
+    const unitLabel = rule.calculationUnit !== 'appointment' ? ` (${quantity}x)` : '';
+    
+    const commissionTransaction: Transaction = {
+      id: `tr${Date.now() + index + 1}`,
       type: 'expense',
-      description: `Comissão ${appointment.professional.name} - ${appointment.procedure}`,
+      description: `Comissão ${displayName} - ${appointment.procedure}${unitLabel}`,
       amount: commissionAmount,
-      paymentMethod: 'cash', // Default, will be paid later
+      paymentMethod: 'cash',
       category: 'Comissão',
       date: dateStr,
       time: timeStr,
       userId: 'user1',
       userName: 'Sistema',
-      notes: `Ref. atendimento ${appointment.id} | Regra: ${rule.calculationType === 'percentage' ? `${rule.value}%` : `R$ ${rule.value}`}`,
+      notes: `Ref. atendimento ${appointment.id} | Tipo: ${rule.beneficiaryType} | Regra: ${rule.calculationType === 'percentage' ? `${rule.value}%` : `R$ ${rule.value}/${rule.calculationUnit}`}`,
     };
-  }
+    
+    commissionTransactions.push(commissionTransaction);
+  });
 
   return {
-    commission,
+    commissions,
     incomeTransaction,
-    commissionTransaction,
+    commissionTransactions,
   };
 }
 
@@ -180,5 +245,18 @@ export function formatCommissionInfo(rule: CommissionRule | null): string {
   if (rule.calculationType === 'percentage') {
     return `${rule.value}% do valor`;
   }
-  return `R$ ${rule.value.toFixed(2)} fixo`;
+  
+  const unitLabel = rule.calculationUnit === 'appointment' ? '' : `/${rule.calculationUnit}`;
+  return `R$ ${rule.value.toFixed(2)}${unitLabel}`;
+}
+
+/**
+ * Gets available staff members by role
+ */
+export function getStaffByRole(role: BeneficiaryType, clinicId?: string): typeof mockStaffMembers {
+  return mockStaffMembers.filter(s => 
+    s.role === role && 
+    s.isActive && 
+    (!clinicId || s.clinicId === clinicId)
+  );
 }
