@@ -1,12 +1,109 @@
 import { CommissionRule, CommissionCalculation, CalculationType, BeneficiaryType, calculateAutoPriority } from '@/types/commission';
 import { Transaction } from '@/types/financial';
 import { AgendaAppointment } from '@/types/agenda';
-import { mockCommissionRules, mockProcedurePrices, mockStaffMembers } from '@/data/mockCommissions';
+import { mockCommissionRules, mockProcedurePrices, mockStaffMembers, mockCommissionCalculations } from '@/data/mockCommissions';
 
 export interface CompleteAppointmentResult {
   commissions: CommissionCalculation[];
   incomeTransaction: Transaction;
   commissionTransactions: Transaction[];
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  error?: string;
+  errorCode?: 'NO_RULE' | 'DUPLICATE' | 'ALREADY_PAID' | 'INVALID_VALUE';
+}
+
+/**
+ * Validates if an appointment can be completed with commission
+ */
+export function validateAppointmentCompletion(
+  appointment: AgendaAppointment,
+  rules: CommissionRule[],
+  existingCalculations: CommissionCalculation[],
+  requireRule: boolean = true
+): ValidationResult {
+  // Check for duplicate calculation
+  const existingCalc = existingCalculations.find(
+    calc => calc.appointmentId === appointment.id && calc.beneficiaryType === 'professional'
+  );
+  
+  if (existingCalc) {
+    return {
+      isValid: false,
+      error: 'Este atendimento já possui comissão calculada.',
+      errorCode: 'DUPLICATE',
+    };
+  }
+
+  // Check for valid commission rule (if required)
+  if (requireRule) {
+    const applicableRule = findApplicableRule(
+      rules,
+      appointment.professional.id,
+      appointment.clinic.id,
+      appointment.procedure,
+      new Date(appointment.date)
+    );
+
+    if (!applicableRule) {
+      return {
+        isValid: false,
+        error: 'Nenhuma regra de comissão válida encontrada para este atendimento. Configure uma regra antes de finalizar.',
+        errorCode: 'NO_RULE',
+      };
+    }
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Validates if a commission calculation can be edited
+ */
+export function validateCommissionEdit(
+  calculation: CommissionCalculation
+): ValidationResult {
+  if (calculation.status === 'paid') {
+    return {
+      isValid: false,
+      error: 'Não é possível editar uma comissão já paga.',
+      errorCode: 'ALREADY_PAID',
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Validates if a commission calculation can be deleted
+ */
+export function validateCommissionDelete(
+  calculation: CommissionCalculation
+): ValidationResult {
+  if (calculation.status === 'paid') {
+    return {
+      isValid: false,
+      error: 'Não é possível excluir uma comissão já paga.',
+      errorCode: 'ALREADY_PAID',
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Checks if a commission already exists for an appointment
+ */
+export function hasExistingCommission(
+  appointmentId: string,
+  beneficiaryType: BeneficiaryType = 'professional',
+  existingCalculations: CommissionCalculation[] = mockCommissionCalculations
+): boolean {
+  return existingCalculations.some(
+    calc => calc.appointmentId === appointmentId && calc.beneficiaryType === beneficiaryType
+  );
 }
 
 /**
