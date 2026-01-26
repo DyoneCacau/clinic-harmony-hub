@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Calendar,
@@ -17,6 +17,7 @@ import {
   Percent,
   Clock,
   FileText,
+  Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAuth } from "@/hooks/useAuth";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -44,6 +46,13 @@ const menuItems = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isSuperAdmin, profile, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
   return (
     <aside
@@ -71,9 +80,47 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-3">
         <ul className="space-y-1">
+          {/* SuperAdmin Link - only for superadmins */}
+          {isSuperAdmin && (
+            <li className="mb-2">
+              {collapsed ? (
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to="/superadmin"
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                        location.pathname === '/superadmin'
+                          ? "bg-amber-500 text-white shadow-md"
+                          : "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+                      )}
+                    >
+                      <Crown className="h-5 w-5 flex-shrink-0" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="font-medium">
+                    SuperAdmin
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Link
+                  to="/superadmin"
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    location.pathname === '/superadmin'
+                      ? "bg-amber-500 text-white shadow-md"
+                      : "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+                  )}
+                >
+                  <Crown className="h-5 w-5 flex-shrink-0" />
+                  <span>SuperAdmin</span>
+                </Link>
+              )}
+            </li>
+          )}
+
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
@@ -120,15 +167,15 @@ export function Sidebar() {
           )}
         >
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-            AD
+            {profile?.name?.charAt(0).toUpperCase() || 'U'}
           </div>
           {!collapsed && (
             <div className="flex-1 overflow-hidden">
               <p className="truncate text-sm font-medium text-sidebar-foreground">
-                Admin
+                {profile?.name || 'Usuário'}
               </p>
               <p className="truncate text-xs text-sidebar-muted">
-                admin@clinsoft.com
+                {profile?.email || ''}
               </p>
             </div>
           )}
@@ -151,6 +198,7 @@ export function Sidebar() {
             <Button
               variant="ghost"
               className="flex-1 justify-start gap-2 text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              onClick={handleLogout}
             >
               <LogOut className="h-4 w-4" />
               Sair

@@ -16,6 +16,7 @@ import Inventory from "./pages/Inventory";
 import Professionals from "./pages/Professionals";
 import TimeClock from "./pages/TimeClock";
 import Administration from "./pages/Administration";
+import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -129,8 +130,16 @@ function AppRoutes() {
             <Administration />
           </ProtectedRoute>
         }
-      />
-      <Route path="*" element={<NotFound />} />
+        />
+        <Route
+          path="/superadmin"
+          element={
+            <ProtectedRoute>
+              <SuperAdmin />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
