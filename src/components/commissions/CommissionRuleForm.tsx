@@ -29,19 +29,32 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { CommissionRule, DayOfWeek, CalculationType, daysOfWeekLabels } from '@/types/commission';
+import { Badge } from '@/components/ui/badge';
+import { 
+  CommissionRule, 
+  DayOfWeek, 
+  CalculationType, 
+  CalculationUnit,
+  BeneficiaryType,
+  daysOfWeekLabels,
+  calculationUnitLabels,
+  beneficiaryTypeLabels,
+  calculateAutoPriority,
+} from '@/types/commission';
 import { mockProfessionals } from '@/data/mockAgenda';
 import { mockClinics } from '@/data/mockClinics';
-import { mockProcedurePrices } from '@/data/mockCommissions';
+import { mockProcedurePrices, mockStaffMembers } from '@/data/mockCommissions';
 
 const formSchema = z.object({
   clinicId: z.string().min(1, 'Selecione uma clínica'),
+  beneficiaryType: z.enum(['professional', 'seller', 'reception']),
   professionalId: z.string().min(1, 'Selecione um profissional'),
+  beneficiaryId: z.string().optional(),
   procedure: z.string().min(1, 'Selecione um procedimento'),
   dayOfWeek: z.string().min(1, 'Selecione o dia'),
   calculationType: z.enum(['percentage', 'fixed']),
+  calculationUnit: z.enum(['appointment', 'ml', 'arch', 'unit', 'session']),
   value: z.number().min(0.01, 'Valor deve ser maior que zero'),
-  priority: z.number().min(1).max(100),
   isActive: z.boolean(),
   notes: z.string().optional(),
 });
@@ -69,12 +82,14 @@ export function CommissionRuleForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       clinicId: selectedClinicId || '',
+      beneficiaryType: 'professional',
       professionalId: 'all',
+      beneficiaryId: '',
       procedure: 'all',
       dayOfWeek: 'all',
       calculationType: 'percentage',
+      calculationUnit: 'appointment',
       value: 30,
-      priority: 1,
       isActive: true,
       notes: '',
     },
@@ -84,12 +99,14 @@ export function CommissionRuleForm({
     if (editingRule) {
       form.reset({
         clinicId: editingRule.clinicId,
+        beneficiaryType: editingRule.beneficiaryType,
         professionalId: editingRule.professionalId,
+        beneficiaryId: editingRule.beneficiaryId || '',
         procedure: editingRule.procedure,
         dayOfWeek: editingRule.dayOfWeek,
         calculationType: editingRule.calculationType,
+        calculationUnit: editingRule.calculationUnit,
         value: editingRule.value,
-        priority: editingRule.priority,
         isActive: editingRule.isActive,
         notes: editingRule.notes || '',
       });
@@ -97,12 +114,14 @@ export function CommissionRuleForm({
     } else {
       form.reset({
         clinicId: selectedClinicId || '',
+        beneficiaryType: 'professional',
         professionalId: 'all',
+        beneficiaryId: '',
         procedure: 'all',
         dayOfWeek: 'all',
         calculationType: 'percentage',
+        calculationUnit: 'appointment',
         value: 30,
-        priority: 1,
         isActive: true,
         notes: '',
       });
@@ -111,6 +130,8 @@ export function CommissionRuleForm({
   }, [editingRule, selectedClinicId, form]);
 
   const watchCalculationType = form.watch('calculationType');
+  const watchCalculationUnit = form.watch('calculationUnit');
+  const watchBeneficiaryType = form.watch('beneficiaryType');
 
   // Get unique procedures for the selected clinic
   const procedures = mockProcedurePrices
@@ -118,15 +139,37 @@ export function CommissionRuleForm({
     .map((p) => p.name);
   const uniqueProcedures = [...new Set(procedures)];
 
+  // Get staff members by type and clinic
+  const staffMembers = mockStaffMembers.filter(
+    (s) => s.role === watchBeneficiaryType && 
+           s.isActive && 
+           (s.clinicId === selectedClinic || !selectedClinic)
+  );
+
+  // Calculate preview priority
+  const formValues = form.watch();
+  const previewPriority = calculateAutoPriority({
+    professionalId: formValues.professionalId,
+    procedure: formValues.procedure,
+    dayOfWeek: formValues.dayOfWeek as DayOfWeek,
+    beneficiaryId: formValues.beneficiaryId,
+  });
+
   const handleSubmit = (values: FormValues) => {
+    const beneficiary = staffMembers.find(s => s.id === values.beneficiaryId);
+    
     onSave({
       clinicId: values.clinicId,
       professionalId: values.professionalId as string | 'all',
+      beneficiaryType: values.beneficiaryType as BeneficiaryType,
+      beneficiaryId: values.beneficiaryId || undefined,
+      beneficiaryName: beneficiary?.name,
       procedure: values.procedure as string | 'all',
       dayOfWeek: values.dayOfWeek as DayOfWeek,
       calculationType: values.calculationType as CalculationType,
+      calculationUnit: values.calculationUnit as CalculationUnit,
       value: values.value,
-      priority: values.priority,
+      priority: previewPriority,
       isActive: values.isActive,
       notes: values.notes,
     });
@@ -175,6 +218,34 @@ export function CommissionRuleForm({
               )}
             />
 
+            <FormField
+              control={form.control}
+              name="beneficiaryType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipo de Beneficiário</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Object.entries(beneficiaryTypeLabels).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Profissional, vendedor ou recepção que receberá a comissão
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -202,32 +273,61 @@ export function CommissionRuleForm({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="procedure"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Procedimento</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os Procedimentos</SelectItem>
-                        {uniqueProcedures.map((proc) => (
-                          <SelectItem key={proc} value={proc}>
-                            {proc}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {watchBeneficiaryType !== 'professional' && (
+                <FormField
+                  control={form.control}
+                  name="beneficiaryId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        {watchBeneficiaryType === 'seller' ? 'Vendedor' : 'Recepcionista'}
+                      </FormLabel>
+                      <Select value={field.value || ''} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {staffMembers.map((staff) => (
+                            <SelectItem key={staff.id} value={staff.id}>
+                              {staff.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
+
+            <FormField
+              control={form.control}
+              name="procedure"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Procedimento</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Procedimentos</SelectItem>
+                      {uniqueProcedures.map((proc) => (
+                        <SelectItem key={proc} value={proc}>
+                          {proc}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -282,34 +382,24 @@ export function CommissionRuleForm({
 
               <FormField
                 control={form.control}
-                name="value"
+                name="calculationUnit"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      {watchCalculationType === 'percentage' ? 'Percentual' : 'Valor'}
-                    </FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          step={watchCalculationType === 'percentage' ? '1' : '0.01'}
-                          min="0"
-                          max={watchCalculationType === 'percentage' ? '100' : undefined}
-                          {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                          className={watchCalculationType === 'percentage' ? 'pr-8' : 'pl-9'}
-                        />
-                        {watchCalculationType === 'percentage' ? (
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                            %
-                          </span>
-                        ) : (
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                            R$
-                          </span>
-                        )}
-                      </div>
-                    </FormControl>
+                    <FormLabel>Unidade de Cálculo</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.entries(calculationUnitLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -318,26 +408,56 @@ export function CommissionRuleForm({
 
             <FormField
               control={form.control}
-              name="priority"
+              name="value"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Prioridade (1-100)</FormLabel>
+                  <FormLabel>
+                    {watchCalculationType === 'percentage' ? 'Percentual' : 'Valor'}
+                    {watchCalculationType === 'fixed' && watchCalculationUnit !== 'appointment' && (
+                      <span className="text-muted-foreground ml-1">
+                        (por {calculationUnitLabels[watchCalculationUnit].replace('Por ', '').toLowerCase()})
+                      </span>
+                    )}
+                  </FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="100"
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
-                    />
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        step={watchCalculationType === 'percentage' ? '1' : '0.01'}
+                        min="0"
+                        max={watchCalculationType === 'percentage' ? '100' : undefined}
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        className={watchCalculationType === 'percentage' ? 'pr-8' : 'pl-9'}
+                      />
+                      {watchCalculationType === 'percentage' ? (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                          %
+                        </span>
+                      ) : (
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                          R$
+                        </span>
+                      )}
+                    </div>
                   </FormControl>
-                  <FormDescription>
-                    Regras com maior prioridade são aplicadas primeiro quando há conflito
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {/* Auto Priority Preview */}
+            <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/30">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Prioridade Automática</p>
+                <p className="text-xs text-muted-foreground">
+                  Calculada com base na especificidade da regra
+                </p>
+              </div>
+              <Badge variant="outline" className="font-mono text-lg">
+                {previewPriority}
+              </Badge>
+            </div>
 
             <FormField
               control={form.control}

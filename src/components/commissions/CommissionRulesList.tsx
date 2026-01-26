@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { Edit2, Trash2, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react';
+import { Edit2, Trash2, ToggleLeft, ToggleRight, AlertCircle, User, Users, Headphones } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -27,7 +25,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { CommissionRule, daysOfWeekLabels, calculationTypeLabels } from '@/types/commission';
+import { 
+  CommissionRule, 
+  daysOfWeekLabels, 
+  calculationTypeLabels,
+  calculationUnitLabels,
+  beneficiaryTypeLabels,
+  BeneficiaryType,
+} from '@/types/commission';
 import { mockProfessionals } from '@/data/mockAgenda';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +45,28 @@ interface CommissionRulesListProps {
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+const getBeneficiaryIcon = (type: BeneficiaryType) => {
+  switch (type) {
+    case 'professional':
+      return <User className="h-3 w-3" />;
+    case 'seller':
+      return <Users className="h-3 w-3" />;
+    case 'reception':
+      return <Headphones className="h-3 w-3" />;
+  }
+};
+
+const getBeneficiaryColor = (type: BeneficiaryType) => {
+  switch (type) {
+    case 'professional':
+      return 'bg-blue-100 text-blue-700 border-blue-200';
+    case 'seller':
+      return 'bg-purple-100 text-purple-700 border-purple-200';
+    case 'reception':
+      return 'bg-teal-100 text-teal-700 border-teal-200';
+  }
+};
 
 export function CommissionRulesList({
   rules,
@@ -71,16 +98,27 @@ export function CommissionRulesList({
 
   const sortedRules = [...rules].sort((a, b) => b.priority - a.priority);
 
+  const formatValue = (rule: CommissionRule) => {
+    if (rule.calculationType === 'percentage') {
+      return `${rule.value}%`;
+    }
+    const unitSuffix = rule.calculationUnit !== 'appointment' 
+      ? `/${rule.calculationUnit}` 
+      : '';
+    return `${formatCurrency(rule.value)}${unitSuffix}`;
+  };
+
   return (
     <>
-      <div className="rounded-lg border">
+      <div className="rounded-lg border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Beneficiário</TableHead>
               <TableHead>Profissional</TableHead>
               <TableHead>Procedimento</TableHead>
               <TableHead>Dia</TableHead>
-              <TableHead>Tipo</TableHead>
+              <TableHead>Tipo/Unidade</TableHead>
               <TableHead className="text-right">Valor</TableHead>
               <TableHead className="text-center">Prioridade</TableHead>
               <TableHead className="text-center">Status</TableHead>
@@ -90,7 +128,7 @@ export function CommissionRulesList({
           <TableBody>
             {sortedRules.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                   <AlertCircle className="mx-auto h-8 w-8 mb-2 opacity-50" />
                   Nenhuma regra de comissão cadastrada
                 </TableCell>
@@ -101,6 +139,22 @@ export function CommissionRulesList({
                   key={rule.id}
                   className={cn(!rule.isActive && 'opacity-50 bg-muted/30')}
                 >
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <Badge 
+                        variant="outline" 
+                        className={cn('gap-1 w-fit', getBeneficiaryColor(rule.beneficiaryType))}
+                      >
+                        {getBeneficiaryIcon(rule.beneficiaryType)}
+                        {beneficiaryTypeLabels[rule.beneficiaryType]}
+                      </Badge>
+                      {rule.beneficiaryName && (
+                        <span className="text-xs text-muted-foreground">
+                          {rule.beneficiaryName}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium">
                     {getProfessionalName(rule.professionalId)}
                   </TableCell>
@@ -108,26 +162,45 @@ export function CommissionRulesList({
                     {rule.procedure === 'all' ? (
                       <Badge variant="outline">Todos</Badge>
                     ) : (
-                      rule.procedure
+                      <span className="text-sm">{rule.procedure}</span>
                     )}
                   </TableCell>
-                  <TableCell>{daysOfWeekLabels[rule.dayOfWeek]}</TableCell>
+                  <TableCell className="text-sm">
+                    {rule.dayOfWeek === 'all' ? (
+                      <Badge variant="outline">Todos</Badge>
+                    ) : (
+                      daysOfWeekLabels[rule.dayOfWeek]
+                    )}
+                  </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={rule.calculationType === 'percentage' ? 'default' : 'secondary'}
-                    >
-                      {calculationTypeLabels[rule.calculationType]}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge
+                        variant={rule.calculationType === 'percentage' ? 'default' : 'secondary'}
+                        className="w-fit"
+                      >
+                        {calculationTypeLabels[rule.calculationType]}
+                      </Badge>
+                      {rule.calculationUnit !== 'appointment' && (
+                        <span className="text-xs text-muted-foreground">
+                          {calculationUnitLabels[rule.calculationUnit]}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-semibold">
-                    {rule.calculationType === 'percentage'
-                      ? `${rule.value}%`
-                      : formatCurrency(rule.value)}
+                    {formatValue(rule)}
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant="outline" className="font-mono">
-                      {rule.priority}
-                    </Badge>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Badge variant="outline" className="font-mono">
+                          {rule.priority}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Prioridade automática baseada na especificidade
+                      </TooltipContent>
+                    </Tooltip>
                   </TableCell>
                   <TableCell className="text-center">
                     <Tooltip>
