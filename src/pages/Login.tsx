@@ -11,10 +11,12 @@ import { toast } from "sonner";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const navigate = useNavigate();
-  const { signIn, user, isLoading: authLoading } = useAuth();
+  const { signIn, signUp, user, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -26,14 +28,25 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
 
-    const { error } = await signIn(email, password);
-
-    if (error) {
-      toast.error(error.message || "Erro ao fazer login");
-      setIsLoading(false);
+    if (isSignUp) {
+      const { error } = await signUp(email, password, name);
+      if (error) {
+        toast.error(error.message || "Erro ao criar conta");
+        setIsLoading(false);
+      } else {
+        toast.success("Conta criada com sucesso! Você já pode fazer login.");
+        setIsSignUp(false);
+        setIsLoading(false);
+      }
     } else {
-      toast.success("Login realizado com sucesso!");
-      navigate("/");
+      const { error } = await signIn(email, password);
+      if (error) {
+        toast.error(error.message || "Erro ao fazer login");
+        setIsLoading(false);
+      } else {
+        toast.success("Login realizado com sucesso!");
+        navigate("/");
+      }
     }
   };
 
@@ -106,14 +119,30 @@ export default function Login() {
 
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-foreground">
-              Bem-vindo de volta
+              {isSignUp ? "Criar conta" : "Bem-vindo de volta"}
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Entre com suas credenciais para acessar sua conta
+              {isSignUp
+                ? "Preencha os dados para criar sua conta"
+                : "Entre com suas credenciais para acessar sua conta"}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {isSignUp && (
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome completo</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Seu nome"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
               <div className="relative">
@@ -157,35 +186,47 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Checkbox id="remember" />
-                <Label htmlFor="remember" className="text-sm font-normal">
-                  Lembrar de mim
-                </Label>
+            {!isSignUp && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="remember" />
+                  <Label htmlFor="remember" className="text-sm font-normal">
+                    Lembrar de mim
+                  </Label>
+                </div>
+                <a
+                  href="#"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Esqueceu a senha?
+                </a>
               </div>
-              <a
-                href="#"
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                Esqueceu a senha?
-              </a>
-            </div>
+            )}
 
             <Button
               type="submit"
               className="w-full gradient-primary text-primary-foreground hover:opacity-90"
               disabled={isLoading}
             >
-              {isLoading ? "Entrando..." : "Entrar"}
+              {isLoading
+                ? isSignUp
+                  ? "Criando..."
+                  : "Entrando..."
+                : isSignUp
+                ? "Criar conta"
+                : "Entrar"}
             </Button>
           </form>
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
-            Não tem uma conta?{" "}
-            <a href="#" className="font-medium text-primary hover:underline">
-              Entre em contato
-            </a>
+            {isSignUp ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="font-medium text-primary hover:underline"
+            >
+              {isSignUp ? "Fazer login" : "Criar conta"}
+            </button>
           </p>
         </div>
       </div>
