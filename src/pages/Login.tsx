@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Activity, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -12,16 +14,36 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { signIn, user, isLoading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate("/");
+    }
+  }, [user, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate login
-    setTimeout(() => {
+
+    const { error } = await signIn(email, password);
+
+    if (error) {
+      toast.error(error.message || "Erro ao fazer login");
       setIsLoading(false);
+    } else {
+      toast.success("Login realizado com sucesso!");
       navigate("/");
-    }, 1000);
+    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -38,12 +60,12 @@ export default function Login() {
 
         <div className="space-y-6">
           <h1 className="text-4xl font-bold leading-tight text-primary-foreground">
-            Gestão clínica
+            Gestão odontológica
             <br />
             simplificada.
           </h1>
           <p className="max-w-md text-lg text-primary-foreground/80">
-            Controle sua clínica de forma eficiente com nosso sistema completo de
+            Controle sua clínica odontológica de forma eficiente com nosso sistema completo de
             gestão. Agendamentos, pacientes, financeiro e muito mais.
           </p>
           <div className="flex items-center gap-8 pt-4">

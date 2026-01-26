@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,17 +12,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -38,80 +29,172 @@ import {
   UserX,
   Phone,
   Mail,
-  Calendar,
   Award,
 } from 'lucide-react';
-import { mockProfessionals } from '@/data/mockAgenda';
-import { Professional } from '@/types/agenda';
+import { ProfessionalFormDialog } from '@/components/professionals/ProfessionalFormDialog';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { mockClinics } from '@/data/mockClinics';
+import { format } from 'date-fns';
 
-interface ExtendedProfessional extends Professional {
-  email?: string;
-  phone?: string;
-  clinicIds: string[];
-  isActive: boolean;
-  hireDate: string;
-  specialties: string[];
+interface Professional {
+  id: string;
+  name: string;
+  specialty: string;
+  cro: string;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+  hire_date: string | null;
 }
 
-const extendedProfessionals: ExtendedProfessional[] = mockProfessionals.map((p, i) => ({
-  ...p,
-  email: `${p.name.split(' ')[0].toLowerCase()}@clinsoft.com`,
-  phone: `(11) 9${String(9000 + i).padStart(4, '0')}-${String(1000 + i * 111).padStart(4, '0')}`,
-  clinicIds: i < 2 ? ['clinic1', 'clinic2'] : [i < 4 ? 'clinic1' : 'clinic3'],
-  isActive: true,
-  hireDate: `202${3 + Math.floor(i / 2)}-0${(i % 6) + 1}-15`,
-  specialties: [p.specialty],
-}));
-
 export default function Professionals() {
-  const [professionals, setProfessionals] = useState<ExtendedProfessional[]>(extendedProfessionals);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [specialtyFilter, setSpecialtyFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedProfessional, setSelectedProfessional] = useState<ExtendedProfessional | null>(null);
+  const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
+
+  useEffect(() => {
+    fetchProfessionals();
+  }, []);
+
+  const fetchProfessionals = async () => {
+    const { data, error } = await supabase
+      .from('professionals')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching professionals:', error);
+    } else {
+      setProfessionals(data || []);
+    }
+  };
 
   const specialties = useMemo(() => {
     const specs = new Set<string>();
-    professionals.forEach(p => p.specialties.forEach(s => specs.add(s)));
+    professionals.forEach((p) => specs.add(p.specialty));
     return Array.from(specs);
   }, [professionals]);
 
   const filteredProfessionals = useMemo(() => {
-    return professionals.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    return professionals.filter((p) => {
+      const matchesSearch =
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.cro.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesSpecialty = specialtyFilter === 'all' || p.specialties.includes(specialtyFilter);
-      const matchesStatus = statusFilter === 'all' || 
-        (statusFilter === 'active' && p.isActive) ||
-        (statusFilter === 'inactive' && !p.isActive);
+      const matchesSpecialty = specialtyFilter === 'all' || p.specialty === specialtyFilter;
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'active' && p.is_active) ||
+        (statusFilter === 'inactive' && !p.is_active);
       return matchesSearch && matchesSpecialty && matchesStatus;
     });
   }, [professionals, searchTerm, specialtyFilter, statusFilter]);
 
-  const stats = useMemo(() => ({
-    total: professionals.length,
-    active: professionals.filter(p => p.isActive).length,
-    inactive: professionals.filter(p => !p.isActive).length,
-    specialties: specialties.length,
-  }), [professionals, specialties]);
+  const stats = useMemo(
+    () => ({
+      total: professionals.length,
+      active: professionals.filter((p) => p.is_active).length,
+      inactive: professionals.filter((p) => !p.is_active).length,
+      specialties: specialties.length,
+    }),
+    [professionals, specialties]
+  );
 
-  const handleToggleStatus = (professional: ExtendedProfessional) => {
-    setProfessionals(prev => prev.map(p => 
-      p.id === professional.id ? { ...p, isActive: !p.isActive } : p
-    ));
-    toast.success(`Profissional ${professional.isActive ? 'desativado' : 'ativado'} com sucesso!`);
+  const handleSaveProfessional = async (data: {
+    id?: string;
+    name: string;
+    specialty: string;
+    cro: string;
+    email: string;
+    phone: string;
+    is_active: boolean;
+    hire_date: string;
+  }) => {
+    if (data.id) {
+      const { error } = await supabase
+        .from('professionals')
+        .update({
+          name: data.name,
+          specialty: data.specialty,
+          cro: data.cro,
+          email: data.email || null,
+          phone: data.phone || null,
+          is_active: data.is_active,
+          hire_date: data.hire_date || null,
+        })
+        .eq('id', data.id);
+
+      if (error) {
+        toast.error('Erro ao atualizar profissional');
+      } else {
+        toast.success('Profissional atualizado com sucesso!');
+        fetchProfessionals();
+      }
+    } else {
+      const { error } = await supabase.from('professionals').insert({
+        name: data.name,
+        specialty: data.specialty,
+        cro: data.cro,
+        email: data.email || null,
+        phone: data.phone || null,
+        is_active: data.is_active,
+        hire_date: data.hire_date || null,
+      });
+
+      if (error) {
+        toast.error('Erro ao cadastrar profissional');
+        console.error(error);
+      } else {
+        toast.success('Profissional cadastrado com sucesso!');
+        fetchProfessionals();
+      }
+    }
   };
 
-  const handleViewDetails = (professional: ExtendedProfessional) => {
+  const handleToggleStatus = async (professional: Professional) => {
+    const { error } = await supabase
+      .from('professionals')
+      .update({ is_active: !professional.is_active })
+      .eq('id', professional.id);
+
+    if (error) {
+      toast.error('Erro ao atualizar status');
+    } else {
+      toast.success(
+        `Profissional ${professional.is_active ? 'desativado' : 'ativado'} com sucesso!`
+      );
+      fetchProfessionals();
+      setDetailsOpen(false);
+    }
+  };
+
+  const handleViewDetails = (professional: Professional) => {
     setSelectedProfessional(professional);
     setDetailsOpen(true);
   };
 
+  const handleEdit = (professional: Professional) => {
+    setEditingProfessional(professional);
+    setFormOpen(true);
+    setDetailsOpen(false);
+  };
+
+  const handleNewProfessional = () => {
+    setEditingProfessional(null);
+    setFormOpen(true);
+  };
+
   const getInitials = (name: string) => {
-    return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
+    return name
+      .split(' ')
+      .slice(0, 2)
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase();
   };
 
   return (
@@ -126,7 +209,7 @@ export default function Professionals() {
             </h1>
             <p className="text-muted-foreground">Gerencie os profissionais da clínica</p>
           </div>
-          <Button>
+          <Button onClick={handleNewProfessional}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Profissional
           </Button>
@@ -210,8 +293,10 @@ export default function Professionals() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {specialties.map(spec => (
-                    <SelectItem key={spec} value={spec}>{spec}</SelectItem>
+                  {specialties.map((spec) => (
+                    <SelectItem key={spec} value={spec}>
+                      {spec}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -232,9 +317,11 @@ export default function Professionals() {
         {/* Professionals Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredProfessionals.map((professional) => (
-            <Card 
-              key={professional.id} 
-              className={`cursor-pointer transition-all hover:shadow-md ${!professional.isActive ? 'opacity-60' : ''}`}
+            <Card
+              key={professional.id}
+              className={`cursor-pointer transition-all hover:shadow-md ${
+                !professional.is_active ? 'opacity-60' : ''
+              }`}
               onClick={() => handleViewDetails(professional)}
             >
               <CardContent className="pt-6">
@@ -248,10 +335,12 @@ export default function Professionals() {
                     <div className="flex items-start justify-between">
                       <div>
                         <h3 className="font-semibold">{professional.name}</h3>
-                        <p className="text-sm text-muted-foreground">{professional.specialty}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {professional.specialty}
+                        </p>
                       </div>
-                      <Badge variant={professional.isActive ? 'default' : 'secondary'}>
-                        {professional.isActive ? 'Ativo' : 'Inativo'}
+                      <Badge variant={professional.is_active ? 'default' : 'secondary'}>
+                        {professional.is_active ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </div>
                     <div className="mt-3 space-y-1 text-sm text-muted-foreground">
@@ -259,20 +348,30 @@ export default function Professionals() {
                         <Award className="h-3.5 w-3.5" />
                         CRO: {professional.cro}
                       </p>
-                      <p className="flex items-center gap-2">
-                        <Phone className="h-3.5 w-3.5" />
-                        {professional.phone}
-                      </p>
-                      <p className="flex items-center gap-2">
-                        <Mail className="h-3.5 w-3.5" />
-                        {professional.email}
-                      </p>
+                      {professional.phone && (
+                        <p className="flex items-center gap-2">
+                          <Phone className="h-3.5 w-3.5" />
+                          {professional.phone}
+                        </p>
+                      )}
+                      {professional.email && (
+                        <p className="flex items-center gap-2">
+                          <Mail className="h-3.5 w-3.5" />
+                          {professional.email}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           ))}
+
+          {filteredProfessionals.length === 0 && (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              Nenhum profissional encontrado
+            </div>
+          )}
         </div>
       </div>
 
@@ -297,8 +396,11 @@ export default function Professionals() {
                 <div>
                   <h3 className="text-lg font-semibold">{selectedProfessional.name}</h3>
                   <p className="text-muted-foreground">{selectedProfessional.specialty}</p>
-                  <Badge variant={selectedProfessional.isActive ? 'default' : 'secondary'} className="mt-1">
-                    {selectedProfessional.isActive ? 'Ativo' : 'Inativo'}
+                  <Badge
+                    variant={selectedProfessional.is_active ? 'default' : 'secondary'}
+                    className="mt-1"
+                  >
+                    {selectedProfessional.is_active ? 'Ativo' : 'Inativo'}
                   </Badge>
                 </div>
               </div>
@@ -310,46 +412,59 @@ export default function Professionals() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Data de Contratação</Label>
-                  <p className="font-medium">{selectedProfessional.hireDate}</p>
+                  <p className="font-medium">
+                    {selectedProfessional.hire_date
+                      ? format(new Date(selectedProfessional.hire_date), 'dd/MM/yyyy')
+                      : '-'}
+                  </p>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Telefone</Label>
-                  <p className="font-medium">{selectedProfessional.phone}</p>
+                  <p className="font-medium">{selectedProfessional.phone || '-'}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Email</Label>
-                  <p className="font-medium">{selectedProfessional.email}</p>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-xs text-muted-foreground">Clínicas</Label>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {selectedProfessional.clinicIds.map(cId => {
-                    const clinic = mockClinics.find(c => c.id === cId);
-                    return clinic ? (
-                      <Badge key={cId} variant="outline">{clinic.name}</Badge>
-                    ) : null;
-                  })}
+                  <p className="font-medium">{selectedProfessional.email || '-'}</p>
                 </div>
               </div>
             </div>
           )}
 
           <DialogFooter className="gap-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => selectedProfessional && handleToggleStatus(selectedProfessional)}
             >
-              {selectedProfessional?.isActive ? 'Desativar' : 'Ativar'}
+              {selectedProfessional?.is_active ? 'Desativar' : 'Ativar'}
             </Button>
-            <Button onClick={() => setDetailsOpen(false)}>
+            <Button onClick={() => selectedProfessional && handleEdit(selectedProfessional)}>
               <Edit className="mr-2 h-4 w-4" />
               Editar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Form Dialog */}
+      <ProfessionalFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        professional={
+          editingProfessional
+            ? {
+                id: editingProfessional.id,
+                name: editingProfessional.name,
+                specialty: editingProfessional.specialty,
+                cro: editingProfessional.cro,
+                email: editingProfessional.email || '',
+                phone: editingProfessional.phone || '',
+                is_active: editingProfessional.is_active,
+                hire_date: editingProfessional.hire_date || new Date().toISOString().split('T')[0],
+              }
+            : null
+        }
+        onSave={handleSaveProfessional}
+      />
     </MainLayout>
   );
 }
