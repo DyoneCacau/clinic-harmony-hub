@@ -2,10 +2,21 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, Clock, AlertTriangle, Crown, Sparkles, Zap } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Check, Clock, AlertTriangle, Crown, Sparkles, Zap, Send } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Plan {
   id: string;
@@ -32,6 +43,7 @@ const featureLabels: Record<string, string> = {
   termos: 'Termos e Documentos',
   ponto: 'Controle de Ponto',
   multi_clinica: 'Multi-Clínicas',
+  administracao: 'Administração',
 };
 
 const planIcons: Record<string, React.ReactNode> = {
@@ -42,10 +54,13 @@ const planIcons: Record<string, React.ReactNode> = {
 };
 
 export function TrialExpiredScreen() {
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
+  const [upgradeNotes, setUpgradeNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchPlans();
@@ -73,9 +88,68 @@ export function TrialExpiredScreen() {
     }
   };
 
-  const handleSelectPlan = (planId: string) => {
-    setSelectedPlan(planId);
-    // Aqui pode abrir modal de pagamento ou redirecionar
+  const handleSelectPlan = (plan: Plan) => {
+    setSelectedPlan(plan);
+    setIsUpgradeDialogOpen(true);
+  };
+
+  const handleSubmitUpgradeRequest = async () => {
+    if (!selectedPlan || !user) return;
+
+    setIsSubmitting(true);
+
+    try {
+      // Get user's clinic
+      const { data: clinicUser } = await supabase
+        .from('clinic_users')
+        .select('clinic_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!clinicUser) {
+        toast.error('Clínica não encontrada');
+        return;
+      }
+
+      // Get subscription
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('id, plan_id')
+        .eq('clinic_id', clinicUser.clinic_id)
+        .maybeSingle();
+
+      // Create upgrade request
+      const { error } = await supabase.from('upgrade_requests').insert({
+        clinic_id: clinicUser.clinic_id,
+        subscription_id: subscription?.id,
+        requested_by: user.id,
+        requested_plan_id: selectedPlan.id,
+        current_plan_id: subscription?.plan_id,
+        notes: upgradeNotes || `Solicitação de upgrade para ${selectedPlan.name}`,
+        status: 'pending',
+      });
+
+      if (error) throw error;
+
+      // Create admin notification
+      await supabase.from('admin_notifications').insert({
+        type: 'upgrade_request',
+        title: 'Nova solicitação de upgrade',
+        message: `Solicitação de upgrade para ${selectedPlan.name}`,
+        reference_type: 'upgrade_request',
+        reference_id: clinicUser.clinic_id,
+      });
+
+      toast.success('Solicitação enviada! Entraremos em contato em breve.');
+      setIsUpgradeDialogOpen(false);
+      setUpgradeNotes('');
+      setSelectedPlan(null);
+    } catch (error) {
+      console.error('Error submitting upgrade request:', error);
+      toast.error('Erro ao enviar solicitação');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -143,7 +217,7 @@ export function TrialExpiredScreen() {
                 className={cn(
                   "relative overflow-hidden transition-all duration-200 hover:shadow-lg",
                   isProfessional && "border-primary shadow-md ring-1 ring-primary/20",
-                  selectedPlan === plan.id && "ring-2 ring-primary"
+                  selectedPlan?.id === plan.id && "ring-2 ring-primary"
                 )}
               >
                 {isProfessional && (
@@ -217,9 +291,9 @@ export function TrialExpiredScreen() {
                       isPremium && "bg-amber-500 hover:bg-amber-600"
                     )}
                     variant={isProfessional ? "default" : "outline"}
-                    onClick={() => handleSelectPlan(plan.id)}
+                    onClick={() => handleSelectPlan(plan)}
                   >
-                    Escolher Plano
+                    Solicitar {plan.name}
                   </Button>
                 </CardContent>
               </Card>
@@ -237,6 +311,55 @@ export function TrialExpiredScreen() {
           </p>
         </div>
       </main>
+
+      {/* Upgrade Request Dialog */}
+      <Dialog open={isUpgradeDialogOpen} onOpenChange={setIsUpgradeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-primary" />
+              Solicitar {selectedPlan?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Envie uma solicitação de upgrade. Nossa equipe entrará em contato para finalizar a ativação.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-lg bg-accent/50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium">{selectedPlan?.name}</span>
+                <span className="font-bold text-primary">
+                  R$ {selectedPlan?.price_monthly.toFixed(2).replace('.', ',')}/mês
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {selectedPlan?.features.length} funcionalidades incluídas
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Observações (opcional)</Label>
+              <Textarea
+                id="notes"
+                placeholder="Alguma observação ou dúvida sobre o plano?"
+                value={upgradeNotes}
+                onChange={(e) => setUpgradeNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsUpgradeDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmitUpgradeRequest} disabled={isSubmitting}>
+              {isSubmitting ? 'Enviando...' : 'Enviar Solicitação'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Footer */}
       <footer className="border-t py-6">
