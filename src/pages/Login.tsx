@@ -1,22 +1,25 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Activity, Eye, EyeOff, Mail, Lock, User, Building2, Phone, Sparkles, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [clinicName, setClinicName] = useState("");
+  const [phone, setPhone] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const navigate = useNavigate();
-  const { signIn, signUp, user, isLoading: authLoading } = useAuth();
+  const { signIn, user, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -29,13 +32,43 @@ export default function Login() {
     setIsLoading(true);
 
     if (isSignUp) {
-      const { error } = await signUp(email, password, name);
-      if (error) {
-        toast.error(error.message || "Erro ao criar conta");
-        setIsLoading(false);
-      } else {
-        toast.success("Conta criada com sucesso! Você já pode fazer login.");
+      try {
+        // 1. Create user in Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { name },
+          },
+        });
+
+        if (authError) throw authError;
+
+        if (authData.user) {
+          // 2. Call edge function to create clinic + subscription + roles
+          const { error: clinicError } = await supabase.functions.invoke('create-clinic-on-signup', {
+            body: {
+              user_id: authData.user.id,
+              user_email: email,
+              user_name: name,
+              clinic_name: clinicName || `Clínica de ${name}`,
+              phone: phone || undefined,
+            }
+          });
+
+          if (clinicError) {
+            console.error('Error creating clinic:', clinicError);
+            toast.error('Conta criada, mas houve um erro ao criar a clínica. Entre em contato com o suporte.');
+          } else {
+            toast.success("Conta criada com sucesso! Você tem 7 dias de teste gratuito.");
+          }
+        }
+
         setIsSignUp(false);
+        setIsLoading(false);
+      } catch (error: any) {
+        toast.error(error.message || "Erro ao criar conta");
         setIsLoading(false);
       }
     } else {
@@ -57,6 +90,13 @@ export default function Login() {
       </div>
     );
   }
+
+  const trialFeatures = [
+    "Agenda de consultas",
+    "Gestão de pacientes",
+    "Módulo financeiro básico",
+    "7 dias grátis para testar",
+  ];
 
   return (
     <div className="flex min-h-screen">
@@ -81,24 +121,44 @@ export default function Login() {
             Controle sua clínica odontológica de forma eficiente com nosso sistema completo de
             gestão. Agendamentos, pacientes, financeiro e muito mais.
           </p>
-          <div className="flex items-center gap-8 pt-4">
-            <div>
-              <p className="text-3xl font-bold text-primary-foreground">500+</p>
-              <p className="text-sm text-primary-foreground/70">
-                Clínicas ativas
-              </p>
+          
+          {isSignUp && (
+            <div className="bg-primary-foreground/10 backdrop-blur-sm rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary-foreground" />
+                <span className="font-semibold text-primary-foreground">Teste grátis por 7 dias</span>
+              </div>
+              <ul className="space-y-2">
+                {trialFeatures.map((feature) => (
+                  <li key={feature} className="flex items-center gap-2 text-primary-foreground/90">
+                    <Check className="h-4 w-4 text-primary-foreground" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div>
-              <p className="text-3xl font-bold text-primary-foreground">50k+</p>
-              <p className="text-sm text-primary-foreground/70">
-                Pacientes gerenciados
-              </p>
+          )}
+
+          {!isSignUp && (
+            <div className="flex items-center gap-8 pt-4">
+              <div>
+                <p className="text-3xl font-bold text-primary-foreground">500+</p>
+                <p className="text-sm text-primary-foreground/70">
+                  Clínicas ativas
+                </p>
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-primary-foreground">50k+</p>
+                <p className="text-sm text-primary-foreground/70">
+                  Pacientes gerenciados
+                </p>
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-primary-foreground">99.9%</p>
+                <p className="text-sm text-primary-foreground/70">Uptime</p>
+              </div>
             </div>
-            <div>
-              <p className="text-3xl font-bold text-primary-foreground">99.9%</p>
-              <p className="text-sm text-primary-foreground/70">Uptime</p>
-            </div>
-          </div>
+          )}
         </div>
 
         <p className="text-sm text-primary-foreground/60">
@@ -106,7 +166,7 @@ export default function Login() {
         </p>
       </div>
 
-      {/* Right Panel - Login Form */}
+      {/* Right Panel - Form */}
       <div className="flex w-full flex-col justify-center px-8 lg:w-1/2 lg:px-16">
         <div className="mx-auto w-full max-w-md">
           {/* Mobile Logo */}
@@ -119,32 +179,69 @@ export default function Login() {
 
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-foreground">
-              {isSignUp ? "Criar conta" : "Bem-vindo de volta"}
+              {isSignUp ? "Comece seu teste grátis" : "Bem-vindo de volta"}
             </h2>
             <p className="mt-2 text-muted-foreground">
               {isSignUp
-                ? "Preencha os dados para criar sua conta"
+                ? "Crie sua conta e ganhe 7 dias grátis para testar"
                 : "Entre com suas credenciais para acessar sua conta"}
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {isSignUp && (
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome completo</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Seu nome"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Seu nome completo *</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="name"
+                      type="text"
+                      placeholder="João Silva"
+                      className="pl-10"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="clinicName">Nome da Clínica *</Label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="clinicName"
+                      type="text"
+                      placeholder="Clínica Odonto Sorriso"
+                      className="pl-10"
+                      value={clinicName}
+                      onChange={(e) => setClinicName(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefone (opcional)</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="(11) 99999-9999"
+                      className="pl-10"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="email">E-mail *</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -160,7 +257,7 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <Label htmlFor="password">Senha *</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -171,6 +268,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
                 />
                 <button
                   type="button"
@@ -203,6 +301,14 @@ export default function Login() {
               </div>
             )}
 
+            {isSignUp && (
+              <p className="text-xs text-muted-foreground">
+                Ao criar sua conta, você concorda com nossos{" "}
+                <a href="#" className="text-primary hover:underline">Termos de Uso</a> e{" "}
+                <a href="#" className="text-primary hover:underline">Política de Privacidade</a>.
+              </p>
+            )}
+
             <Button
               type="submit"
               className="w-full gradient-primary text-primary-foreground hover:opacity-90"
@@ -210,10 +316,10 @@ export default function Login() {
             >
               {isLoading
                 ? isSignUp
-                  ? "Criando..."
+                  ? "Criando conta..."
                   : "Entrando..."
                 : isSignUp
-                ? "Criar conta"
+                ? "Começar teste grátis"
                 : "Entrar"}
             </Button>
           </form>
@@ -222,10 +328,15 @@ export default function Login() {
             {isSignUp ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
             <button
               type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setName("");
+                setClinicName("");
+                setPhone("");
+              }}
               className="font-medium text-primary hover:underline"
             >
-              {isSignUp ? "Fazer login" : "Criar conta"}
+              {isSignUp ? "Fazer login" : "Criar conta grátis"}
             </button>
           </p>
         </div>

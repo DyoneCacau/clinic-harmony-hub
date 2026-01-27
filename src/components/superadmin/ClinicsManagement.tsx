@@ -114,7 +114,8 @@ export function ClinicsManagement() {
 
   async function handleCreateClinic() {
     try {
-      const { data, error } = await supabase.from('clinics').insert({
+      // 1. Create the clinic
+      const { data: clinicData, error: clinicError } = await supabase.from('clinics').insert({
         name: newClinic.name,
         email: newClinic.email,
         phone: newClinic.phone || null,
@@ -123,36 +124,43 @@ export function ClinicsManagement() {
         state: newClinic.state || null,
       }).select().single();
 
-      if (error) throw error;
+      if (clinicError) throw clinicError;
 
-      // Get trial plan
+      // 2. Get trial plan
       const { data: trialPlan } = await supabase
         .from('plans')
         .select('id')
         .eq('slug', 'trial')
         .single();
 
-      // Create subscription in trial
-      if (trialPlan && data) {
+      // 3. Create subscription in trial
+      if (clinicData) {
         const trialEnds = new Date();
         trialEnds.setDate(trialEnds.getDate() + 7);
 
-        await supabase.from('subscriptions').insert({
-          clinic_id: data.id,
-          plan_id: trialPlan.id,
+        const { error: subError } = await supabase.from('subscriptions').insert({
+          clinic_id: clinicData.id,
+          plan_id: trialPlan?.id || null,
           status: 'trial',
           trial_ends_at: trialEnds.toISOString(),
           payment_status: 'pending',
+          current_period_start: new Date().toISOString(),
+          current_period_end: trialEnds.toISOString(),
         });
+
+        if (subError) {
+          console.error('Error creating subscription:', subError);
+          toast.error('Clínica criada, mas erro ao criar assinatura');
+        }
       }
 
-      toast.success('Clínica criada com sucesso!');
+      toast.success('Clínica criada com sucesso! Trial de 7 dias ativado.');
       setIsCreateDialogOpen(false);
       setNewClinic({ name: "", email: "", phone: "", cnpj: "", city: "", state: "" });
       fetchClinics();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating clinic:', error);
-      toast.error('Erro ao criar clínica');
+      toast.error(error.message || 'Erro ao criar clínica');
     }
   }
 
