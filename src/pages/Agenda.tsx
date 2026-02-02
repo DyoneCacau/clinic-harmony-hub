@@ -10,17 +10,14 @@ import { WeekView } from '@/components/agenda/WeekView';
 import { MonthView } from '@/components/agenda/MonthView';
 import { AppointmentFormDialog } from '@/components/agenda/AppointmentFormDialog';
 import { CompleteAppointmentDialog } from '@/components/agenda/CompleteAppointmentDialog';
-import { AgendaAppointment, AgendaView } from '@/types/agenda';
-import { PaymentMethod, Transaction } from '@/types/financial';
-import { CommissionCalculation } from '@/types/commission';
-import { mockAgendaAppointments, mockProfessionals } from '@/data/mockAgenda';
-import { mockClinics } from '@/data/mockClinics';
-import { completeAppointment } from '@/services/commissionService';
+import { AgendaAppointment, AgendaView, Professional } from '@/types/agenda';
+import { PaymentMethod } from '@/types/financial';
+import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
+import { useProfessionals } from '@/hooks/useProfessionals';
+import { useClinic } from '@/hooks/useClinic';
+import { useTransactionMutations } from '@/hooks/useFinancial';
 import { toast } from 'sonner';
-
-// Shared state for financial integration (in real app, use context or state management)
-export const financialTransactions: Transaction[] = [];
-export const commissionCalculations: CommissionCalculation[] = [];
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Agenda() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -28,11 +25,69 @@ export default function Agenda() {
   const [selectedClinic, setSelectedClinic] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [view, setView] = useState<AgendaView>('day');
-  const [appointments, setAppointments] = useState<AgendaAppointment[]>(mockAgendaAppointments);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AgendaAppointment | null>(null);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completingAppointment, setCompletingAppointment] = useState<AgendaAppointment | null>(null);
+
+  const { clinic } = useClinic();
+  const { appointments: rawAppointments, isLoading: isLoadingAppointments } = useAppointments();
+  const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
+  const { createAppointment, updateAppointment } = useAppointmentMutations();
+  const { createTransaction } = useTransactionMutations();
+
+  // Transform DB appointments to UI format
+  const appointments: AgendaAppointment[] = useMemo(() => {
+    return rawAppointments.map((apt: any) => ({
+      id: apt.id,
+      date: apt.date,
+      startTime: apt.start_time?.slice(0, 5) || '',
+      endTime: apt.end_time?.slice(0, 5) || '',
+      patientId: apt.patient_id,
+      patientName: apt.patient?.name || 'Paciente',
+      professional: {
+        id: apt.professional?.id || apt.professional_id,
+        name: apt.professional?.name || 'Profissional',
+        specialty: apt.professional?.specialty || '',
+        cro: apt.professional?.cro || '',
+      } as Professional,
+      procedure: apt.procedure,
+      status: apt.status as AgendaAppointment['status'],
+      paymentStatus: apt.payment_status as AgendaAppointment['paymentStatus'],
+      notes: apt.notes,
+      clinic: {
+        id: clinic?.id || '',
+        name: clinic?.name || '',
+        address: clinic?.address || '',
+        phone: clinic?.phone || '',
+        cnpj: clinic?.cnpj || '',
+      },
+      sellerId: apt.seller_id,
+      leadSource: apt.lead_source,
+    }));
+  }, [rawAppointments, clinic]);
+
+  // Clinics list (current clinic only for now)
+  const clinics = useMemo(() => {
+    if (!clinic) return [];
+    return [{
+      id: clinic.id,
+      name: clinic.name,
+      address: clinic.address || '',
+      phone: clinic.phone || '',
+      cnpj: clinic.cnpj || '',
+    }];
+  }, [clinic]);
+
+  // Professionals for select
+  const professionals: Professional[] = useMemo(() => {
+    return activeProfessionals.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      specialty: p.specialty,
+      cro: p.cro,
+    }));
+  }, [activeProfessionals]);
 
   const filteredAppointments = useMemo(() => {
     return appointments.filter((apt) => {
@@ -59,21 +114,19 @@ export default function Agenda() {
     setFormDialogOpen(true);
   };
 
-  const handleCancel = (appointment: AgendaAppointment) => {
-    setAppointments((prev) =>
-      prev.map((apt) =>
-        apt.id === appointment.id ? { ...apt, status: 'cancelled' as const } : apt
-      )
-    );
+  const handleCancel = async (appointment: AgendaAppointment) => {
+    await updateAppointment.mutateAsync({
+      id: appointment.id,
+      status: 'cancelled',
+    });
     toast.success('Agendamento cancelado');
   };
 
-  const handleConfirm = (appointment: AgendaAppointment) => {
-    setAppointments((prev) =>
-      prev.map((apt) =>
-        apt.id === appointment.id ? { ...apt, status: 'confirmed' as const } : apt
-      )
-    );
+  const handleConfirm = async (appointment: AgendaAppointment) => {
+    await updateAppointment.mutateAsync({
+      id: appointment.id,
+      status: 'confirmed',
+    });
     toast.success('Agendamento confirmado');
   };
 
@@ -82,71 +135,73 @@ export default function Agenda() {
     setCompleteDialogOpen(true);
   };
 
-  const handleCompleteConfirm = (
+  const handleCompleteConfirm = async (
     appointment: AgendaAppointment,
     serviceValue: number,
     paymentMethod: PaymentMethod,
     quantity: number
   ) => {
-    // Generate financial entries with seller from appointment
-    const result = completeAppointment(
-      appointment, 
-      serviceValue, 
-      paymentMethod,
-      undefined, // use default rules
-      quantity,
-      appointment.sellerId
-    );
-
-    // Add to shared state (in real app, save to database)
-    financialTransactions.push(result.incomeTransaction);
-    result.commissionTransactions.forEach(tx => {
-      financialTransactions.push(tx);
-    });
-    result.commissions.forEach(comm => {
-      commissionCalculations.push(comm);
-    });
-
     // Update appointment status
-    setAppointments((prev) =>
-      prev.map((apt) =>
-        apt.id === appointment.id
-          ? { ...apt, status: 'completed' as const, paymentStatus: 'paid' as const }
-          : apt
-      )
-    );
+    await updateAppointment.mutateAsync({
+      id: appointment.id,
+      status: 'completed',
+      payment_status: 'paid',
+    });
 
-    // Show success with details
-    const totalCommission = result.commissions.reduce((sum, c) => sum + c.commissionAmount, 0);
-    const commissionInfo = totalCommission > 0
-      ? ` | Comissões: R$ ${totalCommission.toFixed(2)} (${result.commissions.length} beneficiário(s))`
-      : '';
-    toast.success(
-      `Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}${commissionInfo}`
-    );
+    // Create financial transaction
+    await createTransaction.mutateAsync({
+      type: 'income',
+      amount: serviceValue,
+      description: `${appointment.procedure} - ${appointment.patientName}`,
+      category: 'Procedimento',
+      payment_method: paymentMethod,
+      reference_type: 'appointment',
+      reference_id: appointment.id,
+    });
+
+    toast.success(`Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}`);
   };
 
   const handleWhatsApp = (appointment: AgendaAppointment) => {
-    const patient = { phone: '(11) 99999-1234' }; // In real app, fetch from patient data
     const message = `Olá! Confirmando sua consulta:\n📅 Data: ${format(new Date(appointment.date), 'dd/MM/yyyy')}\n⏰ Horário: ${appointment.startTime}\n👨‍⚕️ Profissional: ${appointment.professional.name}\n📍 Local: ${appointment.clinic.name}\n\nPor favor, confirme sua presença respondendo esta mensagem.`;
-    const phone = patient.phone.replace(/\D/g, '');
-    const url = `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`;
+    // In production, get real phone from patient
+    const phone = '5511999999999';
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
-  const handleSave = (data: Partial<AgendaAppointment>) => {
+  const handleSave = async (data: Partial<AgendaAppointment>) => {
     if (data.id) {
       // Edit existing
-      setAppointments((prev) =>
-        prev.map((apt) => (apt.id === data.id ? { ...apt, ...data } as AgendaAppointment : apt))
-      );
+      await updateAppointment.mutateAsync({
+        id: data.id,
+        patient_id: data.patientId,
+        professional_id: data.professional?.id,
+        date: data.date,
+        start_time: data.startTime,
+        end_time: data.endTime,
+        procedure: data.procedure,
+        status: data.status,
+        payment_status: data.paymentStatus,
+        notes: data.notes,
+        seller_id: data.sellerId || null,
+        lead_source: data.leadSource || null,
+      });
     } else {
       // Create new
-      const newAppointment: AgendaAppointment = {
-        ...data,
-        id: `ag${Date.now()}`,
-      } as AgendaAppointment;
-      setAppointments((prev) => [...prev, newAppointment]);
+      await createAppointment.mutateAsync({
+        patient_id: data.patientId!,
+        professional_id: data.professional!.id,
+        date: data.date!,
+        start_time: data.startTime!,
+        end_time: data.endTime!,
+        procedure: data.procedure!,
+        status: data.status || 'pending',
+        payment_status: data.paymentStatus || 'pending',
+        notes: data.notes,
+        seller_id: data.sellerId || null,
+        lead_source: data.leadSource || null,
+      });
     }
   };
 
@@ -154,6 +209,27 @@ export default function Agenda() {
     setSelectedDate(date);
     setView('day');
   };
+
+  if (isLoadingAppointments || isLoadingProfessionals) {
+    return (
+      <MainLayout>
+        <div className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Agenda</h1>
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-20" />
+            ))}
+          </div>
+          <Skeleton className="h-96" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -187,8 +263,8 @@ export default function Agenda() {
           onStatusChange={setSelectedStatus}
           view={view}
           onViewChange={setView}
-          professionals={mockProfessionals}
-          clinics={mockClinics}
+          professionals={professionals}
+          clinics={clinics}
         />
 
         {/* Calendar Views */}
@@ -230,8 +306,8 @@ export default function Agenda() {
         open={formDialogOpen}
         onOpenChange={setFormDialogOpen}
         appointment={editingAppointment}
-        professionals={mockProfessionals}
-        clinics={mockClinics}
+        professionals={professionals}
+        clinics={clinics}
         existingAppointments={appointments}
         onSave={handleSave}
       />

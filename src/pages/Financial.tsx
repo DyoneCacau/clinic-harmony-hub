@@ -21,114 +21,107 @@ import { PaymentForm } from '@/components/financial/PaymentForm';
 import { TransactionsList } from '@/components/financial/TransactionsList';
 import { CashClosingDialog } from '@/components/financial/CashClosingDialog';
 import { CashRegister, CashSummary, Transaction } from '@/types/financial';
-import { mockCashRegister } from '@/data/mockFinancial';
+import { useTodayTransactions, useFinancialSummary, useTransactionMutations } from '@/hooks/useFinancial';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { FeatureButton } from '@/components/subscription/FeatureButton';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Financial() {
-  const [cashRegister, setCashRegister] = useState<CashRegister>(mockCashRegister);
+  const [isCashOpen, setIsCashOpen] = useState(true);
+  const [initialBalance, setInitialBalance] = useState(200);
+  const [openedAt, setOpenedAt] = useState(new Date().toISOString());
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [closingDialogOpen, setClosingDialogOpen] = useState(false);
 
-  const summary = useMemo<CashSummary>(() => {
-    const transactions = cashRegister.transactions;
-    
-    let totalCash = 0;
-    let totalCredit = 0;
-    let totalDebit = 0;
-    let totalPix = 0;
-    let totalVoucher = 0;
-    let totalIncome = 0;
-    let totalExpense = 0;
+  const { user } = useAuth();
+  const { transactions: rawTransactions, isLoading } = useTodayTransactions();
+  const { summary, isLoading: isSummaryLoading } = useFinancialSummary();
+  const { createTransaction } = useTransactionMutations();
 
-    transactions.forEach((t) => {
-      const amount = t.type === 'income' ? t.amount : 0;
-      
-      if (t.type === 'income') {
-        totalIncome += t.amount;
-      } else {
-        totalExpense += t.amount;
-      }
-
-      if (t.paymentMethod === 'split' && t.paymentSplit) {
-        // Handle split payments
-        const methods = [
-          { method: t.paymentSplit.method1, amount: t.paymentSplit.amount1 },
-          { method: t.paymentSplit.method2, amount: t.paymentSplit.amount2 },
-        ];
-        methods.forEach(({ method, amount: splitAmount }) => {
-          switch (method) {
-            case 'cash': totalCash += splitAmount; break;
-            case 'credit': totalCredit += splitAmount; break;
-            case 'debit': totalDebit += splitAmount; break;
-            case 'pix': totalPix += splitAmount; break;
-          }
-        });
-      } else {
-        switch (t.paymentMethod) {
-          case 'cash': totalCash += amount; break;
-          case 'credit': totalCredit += amount; break;
-          case 'debit': totalDebit += amount; break;
-          case 'pix': totalPix += amount; break;
-          case 'voucher': totalVoucher += amount; break;
-        }
-      }
-    });
-
-    return {
-      totalCash,
-      totalCredit,
-      totalDebit,
-      totalPix,
-      totalVoucher,
-      totalIncome,
-      totalExpense,
-      netBalance: totalIncome - totalExpense,
-      transactionCount: transactions.length,
-    };
-  }, [cashRegister.transactions]);
-
-  const handleAddTransaction = (transaction: Omit<Transaction, 'id'>) => {
-    const newTransaction: Transaction = {
-      ...transaction,
-      id: `tr${Date.now()}`,
-    };
-
-    setCashRegister((prev) => ({
-      ...prev,
-      transactions: [...prev.transactions, newTransaction],
+  // Transform transactions to UI format
+  const transactions: Transaction[] = useMemo(() => {
+    return rawTransactions.map((t: any) => ({
+      id: t.id,
+      type: t.type as 'income' | 'expense',
+      description: t.description || '',
+      amount: Number(t.amount),
+      paymentMethod: t.payment_method as any,
+      category: t.category || '',
+      date: t.created_at.split('T')[0],
+      time: format(new Date(t.created_at), 'HH:mm'),
+      userId: t.user_id,
+      userName: 'Usuário',
     }));
+  }, [rawTransactions]);
+
+  const cashRegister: CashRegister = useMemo(() => ({
+    id: 'current',
+    openedAt,
+    openedBy: user?.id || '',
+    openedByName: user?.email?.split('@')[0] || 'Usuário',
+    initialBalance,
+    transactions,
+    status: isCashOpen ? 'open' : 'closed',
+  }), [openedAt, user, initialBalance, transactions, isCashOpen]);
+
+  const cashSummary: CashSummary = useMemo(() => ({
+    totalCash: summary?.totalCash || 0,
+    totalCredit: summary?.totalCredit || 0,
+    totalDebit: summary?.totalDebit || 0,
+    totalPix: summary?.totalPix || 0,
+    totalVoucher: 0,
+    totalIncome: summary?.totalIncome || 0,
+    totalExpense: summary?.totalExpense || 0,
+    netBalance: summary?.netBalance || 0,
+    transactionCount: summary?.transactionCount || 0,
+  }), [summary]);
+
+  const handleAddTransaction = async (transaction: Omit<Transaction, 'id'>) => {
+    await createTransaction.mutateAsync({
+      type: transaction.type,
+      amount: transaction.amount,
+      description: transaction.description,
+      category: transaction.category,
+      payment_method: transaction.paymentMethod,
+    });
   };
 
   const handleOpenCash = () => {
-    setCashRegister({
-      id: `cr${Date.now()}`,
-      openedAt: new Date().toISOString(),
-      openedBy: 'user1',
-      openedByName: 'Recepcionista Ana',
-      initialBalance: 200.00,
-      transactions: [],
-      status: 'open',
-    });
+    setOpenedAt(new Date().toISOString());
+    setIsCashOpen(true);
     toast.success('Caixa aberto com sucesso!');
   };
 
   const handleCloseCash = () => {
-    setCashRegister((prev) => ({
-      ...prev,
-      status: 'closed',
-      closedAt: new Date().toISOString(),
-      closedBy: 'user1',
-      closedByName: 'Recepcionista Ana',
-      finalBalance: prev.initialBalance + summary.netBalance,
-    }));
+    setIsCashOpen(false);
     setClosingDialogOpen(false);
     toast.success('Caixa fechado com sucesso!');
   };
 
-  const isCashOpen = cashRegister.status === 'open';
+  if (isLoading || isSummaryLoading) {
+    return (
+      <MainLayout>
+        <div className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Financeiro / Caixa</h1>
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            </div>
+          </div>
+          <Skeleton className="h-24" />
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+          <Skeleton className="h-96" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -203,7 +196,7 @@ export default function Financial() {
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {isCashOpen
-                      ? `Aberto por ${cashRegister.openedByName} às ${format(new Date(cashRegister.openedAt), 'HH:mm')}`
+                      ? `Aberto às ${format(new Date(openedAt), 'HH:mm')}`
                       : 'Clique em "Abrir Caixa" para iniciar'}
                   </p>
                 </div>
@@ -212,7 +205,7 @@ export default function Financial() {
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Saldo Inicial</p>
                   <p className="text-xl font-bold text-foreground">
-                    R$ {cashRegister.initialBalance.toFixed(2)}
+                    R$ {initialBalance.toFixed(2)}
                   </p>
                 </div>
               )}
@@ -233,7 +226,7 @@ export default function Financial() {
                     <div>
                       <p className="text-sm text-muted-foreground">Entradas</p>
                       <p className="text-xl font-bold text-emerald-600">
-                        R$ {summary.totalIncome.toFixed(2)}
+                        R$ {cashSummary.totalIncome.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -249,7 +242,7 @@ export default function Financial() {
                     <div>
                       <p className="text-sm text-muted-foreground">Saídas</p>
                       <p className="text-xl font-bold text-red-600">
-                        R$ {summary.totalExpense.toFixed(2)}
+                        R$ {cashSummary.totalExpense.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -266,9 +259,9 @@ export default function Financial() {
                       <p className="text-sm text-muted-foreground">Saldo</p>
                       <p className={cn(
                         'text-xl font-bold',
-                        summary.netBalance >= 0 ? 'text-emerald-600' : 'text-red-600'
+                        cashSummary.netBalance >= 0 ? 'text-emerald-600' : 'text-red-600'
                       )}>
-                        R$ {summary.netBalance.toFixed(2)}
+                        R$ {cashSummary.netBalance.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -284,7 +277,7 @@ export default function Financial() {
                     <div>
                       <p className="text-sm text-muted-foreground">Em Caixa</p>
                       <p className="text-xl font-bold text-blue-600">
-                        R$ {(cashRegister.initialBalance + summary.netBalance).toFixed(2)}
+                        R$ {(initialBalance + cashSummary.netBalance).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -299,7 +292,7 @@ export default function Financial() {
                   <Banknote className="h-4 w-4 text-green-600" />
                   <div>
                     <p className="text-xs text-muted-foreground">Dinheiro</p>
-                    <p className="font-semibold text-green-700">R$ {summary.totalCash.toFixed(2)}</p>
+                    <p className="font-semibold text-green-700">R$ {cashSummary.totalCash.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -308,7 +301,7 @@ export default function Financial() {
                   <CreditCard className="h-4 w-4 text-blue-600" />
                   <div>
                     <p className="text-xs text-muted-foreground">Crédito</p>
-                    <p className="font-semibold text-blue-700">R$ {summary.totalCredit.toFixed(2)}</p>
+                    <p className="font-semibold text-blue-700">R$ {cashSummary.totalCredit.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -317,7 +310,7 @@ export default function Financial() {
                   <CreditCard className="h-4 w-4 text-purple-600" />
                   <div>
                     <p className="text-xs text-muted-foreground">Débito</p>
-                    <p className="font-semibold text-purple-700">R$ {summary.totalDebit.toFixed(2)}</p>
+                    <p className="font-semibold text-purple-700">R$ {cashSummary.totalDebit.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -326,7 +319,7 @@ export default function Financial() {
                   <Smartphone className="h-4 w-4 text-teal-600" />
                   <div>
                     <p className="text-xs text-muted-foreground">PIX</p>
-                    <p className="font-semibold text-teal-700">R$ {summary.totalPix.toFixed(2)}</p>
+                    <p className="font-semibold text-teal-700">R$ {cashSummary.totalPix.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -338,7 +331,7 @@ export default function Financial() {
                 <CardTitle>Movimentações do Dia</CardTitle>
               </CardHeader>
               <CardContent>
-                <TransactionsList transactions={cashRegister.transactions} />
+                <TransactionsList transactions={transactions} />
               </CardContent>
             </Card>
           </>
@@ -364,7 +357,7 @@ export default function Financial() {
         open={closingDialogOpen}
         onOpenChange={setClosingDialogOpen}
         cashRegister={cashRegister}
-        summary={summary}
+        summary={cashSummary}
         onClose={handleCloseCash}
       />
     </MainLayout>

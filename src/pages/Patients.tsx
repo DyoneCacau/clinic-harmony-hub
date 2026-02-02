@@ -7,19 +7,53 @@ import { PatientsList } from '@/components/patients/PatientsList';
 import { PatientFormDialog } from '@/components/patients/PatientFormDialog';
 import { PatientDetailsDialog } from '@/components/patients/PatientDetailsDialog';
 import { WhatsAppConfirmationDialog } from '@/components/patients/WhatsAppConfirmationDialog';
-import { Patient } from '@/types/patient';
-import { mockPatients } from '@/data/mockPatients';
-import { mockAppointmentsWithClinic } from '@/data/mockClinics';
+import { usePatients, usePatientMutations, PatientData } from '@/hooks/usePatients';
+import { useAppointments } from '@/hooks/useAppointments';
+import { Skeleton } from '@/components/ui/skeleton';
+
+// Transform DB patient to UI format
+interface UIPatient {
+  id: string;
+  name: string;
+  cpf: string;
+  phone: string;
+  email: string;
+  address: string;
+  birthDate: string;
+  clinicalNotes: string;
+  allergies: string[];
+  createdAt: string;
+  status: 'active' | 'inactive';
+}
+
+const transformPatient = (p: PatientData): UIPatient => ({
+  id: p.id,
+  name: p.name,
+  cpf: p.cpf || '',
+  phone: p.phone || '',
+  email: p.email || '',
+  address: p.address || '',
+  birthDate: p.birth_date || '',
+  clinicalNotes: p.clinical_notes || '',
+  allergies: p.allergies || [],
+  createdAt: p.created_at.split('T')[0],
+  status: p.status as 'active' | 'inactive',
+});
 
 const Patients = () => {
-  const [patients, setPatients] = useState<Patient[]>(mockPatients);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<UIPatient | null>(null);
+  const [editingPatient, setEditingPatient] = useState<UIPatient | null>(null);
+
+  const { patients: rawPatients, isLoading } = usePatients();
+  const { appointments } = useAppointments();
+  const { createPatient, updatePatient } = usePatientMutations();
+
+  const patients = useMemo(() => rawPatients.map(transformPatient), [rawPatients]);
 
   const filteredPatients = useMemo(() => {
     return patients.filter((patient) => {
@@ -35,17 +69,39 @@ const Patients = () => {
     });
   }, [patients, searchTerm, statusFilter]);
 
-  const handleView = (patient: Patient) => {
+  // Get appointments for a specific patient
+  const getPatientAppointments = (patientId: string) => {
+    return appointments
+      .filter((apt: any) => apt.patient_id === patientId)
+      .map((apt: any) => ({
+        id: apt.id,
+        date: apt.date,
+        time: apt.start_time?.slice(0, 5) || '',
+        professional: apt.professional?.name || 'Profissional',
+        procedure: apt.procedure,
+        status: apt.status,
+        notes: apt.notes,
+        clinic: {
+          id: apt.clinic_id,
+          name: 'Clínica',
+          address: '',
+          phone: '',
+          cnpj: '',
+        },
+      }));
+  };
+
+  const handleView = (patient: UIPatient) => {
     setSelectedPatient(patient);
     setDetailsDialogOpen(true);
   };
 
-  const handleEdit = (patient: Patient) => {
+  const handleEdit = (patient: UIPatient) => {
     setEditingPatient(patient);
     setFormDialogOpen(true);
   };
 
-  const handleWhatsApp = (patient: Patient) => {
+  const handleWhatsApp = (patient: UIPatient) => {
     setSelectedPatient(patient);
     setWhatsAppDialogOpen(true);
   };
@@ -55,29 +111,60 @@ const Patients = () => {
     setFormDialogOpen(true);
   };
 
-  const handleSave = (patientData: Omit<Patient, 'id' | 'createdAt'> & { id?: string }) => {
+  const handleSave = async (patientData: any) => {
     if (patientData.id) {
       // Update existing patient
-      setPatients((prev) =>
-        prev.map((p) =>
-          p.id === patientData.id
-            ? { ...p, ...patientData }
-            : p
-        )
-      );
+      await updatePatient.mutateAsync({
+        id: patientData.id,
+        name: patientData.name,
+        cpf: patientData.cpf,
+        phone: patientData.phone,
+        email: patientData.email,
+        address: patientData.address,
+        birth_date: patientData.birthDate || null,
+        clinical_notes: patientData.clinicalNotes,
+        allergies: patientData.allergies,
+        status: patientData.status,
+      });
     } else {
       // Create new patient
-      const newPatient: Patient = {
-        ...patientData,
-        id: String(Date.now()),
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      setPatients((prev) => [newPatient, ...prev]);
+      await createPatient.mutateAsync({
+        name: patientData.name,
+        cpf: patientData.cpf,
+        phone: patientData.phone,
+        email: patientData.email,
+        address: patientData.address,
+        birth_date: patientData.birthDate || null,
+        clinical_notes: patientData.clinicalNotes,
+        allergies: patientData.allergies,
+        status: patientData.status,
+      });
     }
   };
 
   const activeCount = patients.filter((p) => p.status === 'active').length;
   const inactiveCount = patients.filter((p) => p.status === 'inactive').length;
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Pacientes</h1>
+              <p className="text-muted-foreground">Carregando...</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-20" />
+            ))}
+          </div>
+          <Skeleton className="h-96" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -167,7 +254,7 @@ const Patients = () => {
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           patient={selectedPatient}
-          appointments={selectedPatient ? mockAppointmentsWithClinic[selectedPatient.id] || [] : []}
+          appointments={selectedPatient ? getPatientAppointments(selectedPatient.id) : []}
         />
 
         {/* WhatsApp Confirmation Dialog */}
@@ -175,7 +262,7 @@ const Patients = () => {
           open={whatsAppDialogOpen}
           onOpenChange={setWhatsAppDialogOpen}
           patient={selectedPatient}
-          appointments={selectedPatient ? mockAppointmentsWithClinic[selectedPatient.id] || [] : []}
+          appointments={selectedPatient ? getPatientAppointments(selectedPatient.id) : []}
         />
       </div>
     </MainLayout>
