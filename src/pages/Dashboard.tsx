@@ -1,16 +1,50 @@
 import { Calendar, Users, Stethoscope, DollarSign } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Header } from "@/components/layout/Header";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AppointmentsList } from "@/components/dashboard/AppointmentsList";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { QuickActions } from "@/components/dashboard/QuickActions";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
+  const { stats, isLoading } = useDashboardStats();
+
+  const today = format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen">
+        <Header
+          title="Dashboard"
+          subtitle={`Bem-vindo ao ClinSoft • ${today}`}
+        />
+        <div className="p-6">
+          <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-32" />
+            ))}
+          </div>
+          <Skeleton className="h-80" />
+        </div>
+      </div>
+    );
+  }
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
   return (
     <div className="min-h-screen">
       <Header
         title="Dashboard"
-        subtitle="Bem-vindo ao ClinSoft • Terça, 21 de Janeiro de 2025"
+        subtitle={`Bem-vindo ao ClinSoft • ${today}`}
       />
 
       <div className="p-6">
@@ -18,33 +52,42 @@ export default function Dashboard() {
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Agendamentos Hoje"
-            value={12}
+            value={stats?.appointmentsToday || 0}
             subtitle="vs ontem"
             icon={Calendar}
-            trend={{ value: 8, isPositive: true }}
+            trend={stats?.appointmentTrend ? { 
+              value: Math.abs(stats.appointmentTrend), 
+              isPositive: stats.appointmentTrend >= 0 
+            } : undefined}
             variant="primary"
           />
           <StatCard
             title="Total de Pacientes"
-            value="1.248"
-            subtitle="este mês"
+            value={stats?.totalPatients?.toLocaleString('pt-BR') || "0"}
+            subtitle={`${stats?.newPatientsThisMonth || 0} novos este mês`}
             icon={Users}
-            trend={{ value: 12, isPositive: true }}
+            trend={stats?.newPatientsThisMonth ? { 
+              value: stats.newPatientsThisMonth, 
+              isPositive: true 
+            } : undefined}
             variant="info"
           />
           <StatCard
             title="Profissionais Ativos"
-            value={8}
-            subtitle="disponíveis hoje"
+            value={stats?.activeProfessionals || 0}
+            subtitle="disponíveis"
             icon={Stethoscope}
             variant="success"
           />
           <StatCard
             title="Saldo do Dia"
-            value="R$ 4.850"
-            subtitle="vs média"
+            value={formatCurrency(stats?.todayBalance || 0)}
+            subtitle="receitas - despesas"
             icon={DollarSign}
-            trend={{ value: 15, isPositive: true }}
+            trend={stats?.todayBalance ? { 
+              value: 100, 
+              isPositive: (stats?.todayBalance || 0) >= 0 
+            } : undefined}
             variant="warning"
           />
         </div>

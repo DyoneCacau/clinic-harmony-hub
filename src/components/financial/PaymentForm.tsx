@@ -19,9 +19,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Transaction, PaymentMethod, PaymentSplit } from '@/types/financial';
-import { mockPatients } from '@/data/mockPatients';
-import { incomeCategories, expenseCategories } from '@/data/mockFinancial';
+import { Transaction, PaymentMethod } from '@/types/financial';
+import { usePatients } from '@/hooks/usePatients';
 import { toast } from 'sonner';
 
 interface PaymentFormProps {
@@ -30,6 +29,22 @@ interface PaymentFormProps {
   onSave: (transaction: Omit<Transaction, 'id'>) => void;
   type: 'income' | 'expense';
 }
+
+const incomeCategories = [
+  'Consulta',
+  'Procedimento',
+  'Retorno',
+  'Exame',
+  'Outros',
+];
+
+const expenseCategories = [
+  'Suprimentos',
+  'Material Clínico',
+  'Manutenção',
+  'Serviços',
+  'Outros',
+];
 
 const paymentMethods = [
   { value: 'cash', label: 'Dinheiro', icon: Banknote },
@@ -55,6 +70,7 @@ export function PaymentForm({ open, onOpenChange, onSave, type }: PaymentFormPro
   const [splitMethod2, setSplitMethod2] = useState<Exclude<PaymentMethod, 'split'>>('credit');
   const [splitAmount2, setSplitAmount2] = useState('');
 
+  const { patients } = usePatients();
   const categories = type === 'income' ? incomeCategories : expenseCategories;
 
   const resetForm = () => {
@@ -97,7 +113,7 @@ export function PaymentForm({ open, onOpenChange, onSave, type }: PaymentFormPro
     }
 
     const now = new Date();
-    const patient = mockPatients.find((p) => p.id === patientId);
+    const patient = patients.find((p) => p.id === patientId);
 
     const transaction: Omit<Transaction, 'id'> = {
       type,
@@ -110,7 +126,7 @@ export function PaymentForm({ open, onOpenChange, onSave, type }: PaymentFormPro
       date: now.toISOString().split('T')[0],
       time: now.toTimeString().slice(0, 5),
       userId: 'user1',
-      userName: 'Recepcionista Ana',
+      userName: 'Usuário',
       notes: notes || undefined,
       voucherDiscount: voucherDiscount ? parseFloat(voucherDiscount) : undefined,
       paymentSplit: paymentMethod === 'split' ? {
@@ -135,6 +151,8 @@ export function PaymentForm({ open, onOpenChange, onSave, type }: PaymentFormPro
       setSplitAmount2(half);
     }
   };
+
+  const activePatients = patients.filter((p) => p.status === 'active');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,11 +210,17 @@ export function PaymentForm({ open, onOpenChange, onSave, type }: PaymentFormPro
                   <SelectValue placeholder="Selecione o paciente (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockPatients.filter((p) => p.status === 'active').map((patient) => (
-                    <SelectItem key={patient.id} value={patient.id}>
-                      {patient.name}
+                  {activePatients.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      Nenhum paciente cadastrado
                     </SelectItem>
-                  ))}
+                  ) : (
+                    activePatients.map((patient) => (
+                      <SelectItem key={patient.id} value={patient.id}>
+                        {patient.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

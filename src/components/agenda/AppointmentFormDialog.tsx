@@ -30,8 +30,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@/types/agenda';
 import { Clinic } from '@/types/clinic';
-import { mockPatients } from '@/data/mockPatients';
-import { mockStaffMembers } from '@/data/mockCommissions';
+import { usePatients } from '@/hooks/usePatients';
 import { toast } from 'sonner';
 
 interface AppointmentFormDialogProps {
@@ -64,16 +63,12 @@ export function AppointmentFormDialog({
   const [paymentStatus, setPaymentStatus] = useState<AgendaAppointment['paymentStatus']>('pending');
   const [notes, setNotes] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
-  // New fields
   const [sellerId, setSellerId] = useState<string>('');
   const [leadSource, setLeadSource] = useState<LeadSource | ''>('');
 
-  const isEditing = !!appointment;
+  const { patients } = usePatients();
 
-  // Get sellers for the selected clinic
-  const availableSellers = mockStaffMembers.filter(
-    s => s.role === 'seller' && s.isActive && (!clinicId || s.clinicId === clinicId)
-  );
+  const isEditing = !!appointment;
 
   useEffect(() => {
     if (appointment) {
@@ -96,7 +91,7 @@ export function AppointmentFormDialog({
       setEndTime('09:30');
       setPatientId('');
       setProfessionalId('');
-      setClinicId('');
+      setClinicId(clinics[0]?.id || '');
       setProcedure('');
       setStatus('pending');
       setPaymentStatus('pending');
@@ -104,7 +99,7 @@ export function AppointmentFormDialog({
       setSellerId('');
       setLeadSource('');
     }
-  }, [appointment, open]);
+  }, [appointment, open, clinics]);
 
   const checkConflict = (): boolean => {
     if (!professionalId || !date) return false;
@@ -135,12 +130,14 @@ export function AppointmentFormDialog({
       return;
     }
 
-    const patient = mockPatients.find((p) => p.id === patientId);
+    const patient = patients.find((p) => p.id === patientId);
     const professional = professionals.find((p) => p.id === professionalId);
     const clinic = clinics.find((c) => c.id === clinicId);
-    const seller = sellerId ? availableSellers.find((s) => s.id === sellerId) : null;
 
-    if (!patient || !professional || !clinic) return;
+    if (!patient || !professional || !clinic) {
+      toast.error('Dados inválidos');
+      return;
+    }
 
     onSave({
       id: appointment?.id,
@@ -155,8 +152,7 @@ export function AppointmentFormDialog({
       paymentStatus,
       notes,
       clinic,
-      sellerId: seller?.id,
-      sellerName: seller?.name,
+      sellerId: sellerId || undefined,
       leadSource: leadSource || undefined,
     });
 
@@ -171,6 +167,8 @@ export function AppointmentFormDialog({
       timeOptions.push(time);
     }
   }
+
+  const activePatients = patients.filter((p) => p.status === 'active');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -194,13 +192,17 @@ export function AppointmentFormDialog({
                 <SelectValue placeholder="Selecione o paciente" />
               </SelectTrigger>
               <SelectContent>
-                {mockPatients
-                  .filter((p) => p.status === 'active')
-                  .map((patient) => (
+                {activePatients.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    Nenhum paciente cadastrado
+                  </SelectItem>
+                ) : (
+                  activePatients.map((patient) => (
                     <SelectItem key={patient.id} value={patient.id}>
                       {patient.name}
                     </SelectItem>
-                  ))}
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -296,11 +298,17 @@ export function AppointmentFormDialog({
                 <SelectValue placeholder="Selecione o profissional" />
               </SelectTrigger>
               <SelectContent>
-                {professionals.map((prof) => (
-                  <SelectItem key={prof.id} value={prof.id}>
-                    {prof.name} - {prof.specialty}
+                {professionals.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    Nenhum profissional cadastrado
                   </SelectItem>
-                ))}
+                ) : (
+                  professionals.map((prof) => (
+                    <SelectItem key={prof.id} value={prof.id}>
+                      {prof.name} - {prof.specialty}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -353,47 +361,25 @@ export function AppointmentFormDialog({
             </div>
           </div>
 
-          {/* New Fields: Seller and Lead Source */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Vendedor Responsável</Label>
-              <Select 
-                value={sellerId || 'none'} 
-                onValueChange={(v) => setSellerId(v === 'none' ? '' : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {availableSellers.map((seller) => (
-                    <SelectItem key={seller.id} value={seller.id}>
-                      {seller.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Origem do Lead</Label>
-              <Select 
-                value={leadSource || 'none'} 
-                onValueChange={(v) => setLeadSource(v === 'none' ? '' : v as LeadSource)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Não informado</SelectItem>
-                  {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Lead Source */}
+          <div className="grid gap-2">
+            <Label>Origem do Lead</Label>
+            <Select 
+              value={leadSource || 'none'} 
+              onValueChange={(v) => setLeadSource(v === 'none' ? '' : v as LeadSource)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Não informado</SelectItem>
+                {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid gap-2">

@@ -41,51 +41,54 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
 } from 'lucide-react';
-import { mockInventoryProducts, mockInventoryMovements } from '@/data/mockInventory';
-import { InventoryProduct, InventoryMovement, inventoryCategoryLabels, movementTypeLabels } from '@/types/inventory';
+import { useInventoryProducts, useInventoryMovements, useInventoryMutations } from '@/hooks/useInventory';
+import { inventoryCategoryLabels, movementTypeLabels } from '@/types/inventory';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { FeatureButton } from '@/components/subscription/FeatureButton';
-import { useFeatureAccess } from '@/components/subscription/FeatureAction';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 export default function Inventory() {
-  const { canAccess: canModifyStock } = useFeatureAccess('estoque');
-  const [products, setProducts] = useState<InventoryProduct[]>(mockInventoryProducts);
-  const [movements, setMovements] = useState<InventoryMovement[]>(mockInventoryMovements);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [stockFilter, setStockFilter] = useState('all');
   const [movementDialogOpen, setMovementDialogOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<InventoryProduct | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [movementType, setMovementType] = useState<'entrada' | 'saida'>('entrada');
   const [movementQuantity, setMovementQuantity] = useState('');
   const [movementReason, setMovementReason] = useState('');
   const [movementNotes, setMovementNotes] = useState('');
 
+  const { products, isLoading: isLoadingProducts } = useInventoryProducts();
+  const { movements, isLoading: isLoadingMovements } = useInventoryMovements();
+  const { createMovement } = useInventoryMutations();
+
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.sku.toLowerCase().includes(searchTerm.toLowerCase());
+        (product.sku || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
       const matchesStock = stockFilter === 'all' || 
-        (stockFilter === 'low' && product.currentStock <= product.minimumStock) ||
-        (stockFilter === 'ok' && product.currentStock > product.minimumStock);
-      return matchesSearch && matchesCategory && matchesStock && product.isActive;
+        (stockFilter === 'low' && product.current_stock <= (product.minimum_stock || 0)) ||
+        (stockFilter === 'ok' && product.current_stock > (product.minimum_stock || 0));
+      return matchesSearch && matchesCategory && matchesStock && product.is_active;
     });
   }, [products, searchTerm, categoryFilter, stockFilter]);
 
   const stats = useMemo(() => {
-    const totalProducts = products.filter(p => p.isActive).length;
-    const lowStock = products.filter(p => p.isActive && p.currentStock <= p.minimumStock).length;
-    const totalValue = products.reduce((sum, p) => sum + (p.currentStock * p.costPrice), 0);
-    const todayMovements = movements.filter(m => m.date === format(new Date(), 'yyyy-MM-dd')).length;
+    const activeProducts = products.filter(p => p.is_active);
+    const totalProducts = activeProducts.length;
+    const lowStock = activeProducts.filter(p => p.current_stock <= (p.minimum_stock || 0)).length;
+    const totalValue = activeProducts.reduce((sum, p) => sum + (p.current_stock * (p.cost_price || 0)), 0);
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const todayMovements = movements.filter(m => m.created_at.startsWith(today)).length;
     return { totalProducts, lowStock, totalValue, todayMovements };
   }, [products, movements]);
 
-  const handleMovement = (product: InventoryProduct, type: 'entrada' | 'saida') => {
+  const handleMovement = (product: any, type: 'entrada' | 'saida') => {
     setSelectedProduct(product);
     setMovementType(type);
     setMovementQuantity('');
@@ -94,7 +97,7 @@ export default function Inventory() {
     setMovementDialogOpen(true);
   };
 
-  const handleConfirmMovement = () => {
+  const handleConfirmMovement = async () => {
     if (!selectedProduct || !movementQuantity || !movementReason) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
@@ -106,45 +109,52 @@ export default function Inventory() {
       return;
     }
 
-    if (movementType === 'saida' && qty > selectedProduct.currentStock) {
+    if (movementType === 'saida' && qty > selectedProduct.current_stock) {
       toast.error('Quantidade maior que o estoque disponível');
       return;
     }
 
-    const previousStock = selectedProduct.currentStock;
+    const previousStock = selectedProduct.current_stock;
     const newStock = movementType === 'entrada' 
       ? previousStock + qty 
       : previousStock - qty;
 
-    // Update product
-    setProducts(prev => prev.map(p => 
-      p.id === selectedProduct.id 
-        ? { ...p, currentStock: newStock, updatedAt: new Date().toISOString() }
-        : p
-    ));
-
-    // Add movement
-    const newMovement: InventoryMovement = {
-      id: `mov${Date.now()}`,
-      productId: selectedProduct.id,
-      productName: selectedProduct.name,
+    await createMovement.mutateAsync({
+      product_id: selectedProduct.id,
       type: movementType,
       quantity: qty,
-      previousStock,
-      newStock,
+      previous_stock: previousStock,
+      new_stock: newStock,
       reason: movementReason,
-      userId: 'user1',
-      userName: 'Admin',
-      clinicId: selectedProduct.clinicId,
-      date: format(new Date(), 'yyyy-MM-dd'),
-      time: format(new Date(), 'HH:mm'),
       notes: movementNotes || undefined,
-    };
+    });
 
-    setMovements(prev => [newMovement, ...prev]);
     setMovementDialogOpen(false);
-    toast.success(`${movementType === 'entrada' ? 'Entrada' : 'Saída'} registrada com sucesso!`);
   };
+
+  if (isLoadingProducts || isLoadingMovements) {
+    return (
+      <MainLayout>
+        <div className="space-y-6 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Package className="h-7 w-7 text-primary" />
+                Controle de Estoque
+              </h1>
+              <p className="text-muted-foreground">Carregando...</p>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+          <Skeleton className="h-96" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -267,84 +277,90 @@ export default function Inventory() {
             <CardTitle>Produtos ({filteredProducts.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead className="text-center">Estoque Atual</TableHead>
-                  <TableHead className="text-center">Mínimo</TableHead>
-                  <TableHead className="text-right">Custo Unit.</TableHead>
-                  <TableHead className="text-right">Valor Total</TableHead>
-                  <TableHead className="text-center">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProducts.map((product) => {
-                  const isLowStock = product.currentStock <= product.minimumStock;
-                  return (
-                    <TableRow key={product.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{product.name}</p>
-                          {product.description && (
-                            <p className="text-xs text-muted-foreground">{product.description}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {inventoryCategoryLabels[product.category]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={isLowStock ? 'destructive' : 'secondary'}>
-                          {product.currentStock} {product.unit}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center text-muted-foreground">
-                        {product.minimumStock}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(product.costPrice)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(product.currentStock * product.costPrice)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-center gap-1">
-                          <FeatureButton
-                            feature="estoque"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-emerald-600"
-                            onClick={() => handleMovement(product, 'entrada')}
-                            title="Entrada"
-                          >
-                            <ArrowDownToLine className="h-4 w-4" />
-                          </FeatureButton>
-                          <FeatureButton
-                            feature="estoque"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-600"
-                            onClick={() => handleMovement(product, 'saida')}
-                            title="Saída"
-                          >
-                            <ArrowUpFromLine className="h-4 w-4" />
-                          </FeatureButton>
-                          <FeatureButton feature="estoque" variant="ghost" size="icon" className="h-8 w-8">
-                            <Edit className="h-4 w-4" />
-                          </FeatureButton>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                Nenhum produto encontrado
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead className="text-center">Estoque Atual</TableHead>
+                    <TableHead className="text-center">Mínimo</TableHead>
+                    <TableHead className="text-right">Custo Unit.</TableHead>
+                    <TableHead className="text-right">Valor Total</TableHead>
+                    <TableHead className="text-center">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProducts.map((product) => {
+                    const isLowStock = product.current_stock <= (product.minimum_stock || 0);
+                    return (
+                      <TableRow key={product.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{product.name}</p>
+                            {product.description && (
+                              <p className="text-xs text-muted-foreground">{product.description}</p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{product.sku || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {inventoryCategoryLabels[product.category as keyof typeof inventoryCategoryLabels] || product.category || 'Outros'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={isLowStock ? 'destructive' : 'secondary'}>
+                            {product.current_stock} {product.unit || 'un'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center text-muted-foreground">
+                          {product.minimum_stock || 0}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(product.cost_price || 0)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(product.current_stock * (product.cost_price || 0))}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-center gap-1">
+                            <FeatureButton
+                              feature="estoque"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-emerald-600"
+                              onClick={() => handleMovement(product, 'entrada')}
+                              title="Entrada"
+                            >
+                              <ArrowDownToLine className="h-4 w-4" />
+                            </FeatureButton>
+                            <FeatureButton
+                              feature="estoque"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-600"
+                              onClick={() => handleMovement(product, 'saida')}
+                              title="Saída"
+                            >
+                              <ArrowUpFromLine className="h-4 w-4" />
+                            </FeatureButton>
+                            <FeatureButton feature="estoque" variant="ghost" size="icon" className="h-8 w-8">
+                              <Edit className="h-4 w-4" />
+                            </FeatureButton>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -354,49 +370,51 @@ export default function Inventory() {
             <CardTitle>Movimentações Recentes</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data/Hora</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-center">Quantidade</TableHead>
-                  <TableHead>Estoque Anterior → Novo</TableHead>
-                  <TableHead>Motivo</TableHead>
-                  <TableHead>Usuário</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {movements.slice(0, 10).map((movement) => (
-                  <TableRow key={movement.id}>
-                    <TableCell className="text-sm">
-                      {movement.date} {movement.time}
-                    </TableCell>
-                    <TableCell className="font-medium">{movement.productName}</TableCell>
-                    <TableCell>
-                      <Badge variant={movement.type === 'entrada' ? 'default' : 'destructive'}>
-                        {movement.type === 'entrada' ? (
-                          <TrendingUp className="mr-1 h-3 w-3" />
-                        ) : (
-                          <TrendingDown className="mr-1 h-3 w-3" />
-                        )}
-                        {movementTypeLabels[movement.type]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center font-medium">
-                      {movement.type === 'entrada' ? '+' : '-'}{movement.quantity}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {movement.previousStock} → {movement.newStock}
-                    </TableCell>
-                    <TableCell>{movement.reason}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {movement.userName}
-                    </TableCell>
+            {movements.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                Nenhuma movimentação registrada
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data/Hora</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-center">Quantidade</TableHead>
+                    <TableHead>Estoque Anterior → Novo</TableHead>
+                    <TableHead>Motivo</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {movements.slice(0, 10).map((movement: any) => (
+                    <TableRow key={movement.id}>
+                      <TableCell className="text-sm">
+                        {format(new Date(movement.created_at), 'dd/MM/yyyy HH:mm')}
+                      </TableCell>
+                      <TableCell className="font-medium">{movement.product?.name || 'Produto'}</TableCell>
+                      <TableCell>
+                        <Badge variant={movement.type === 'entrada' ? 'default' : 'destructive'}>
+                          {movement.type === 'entrada' ? (
+                            <TrendingUp className="mr-1 h-3 w-3" />
+                          ) : (
+                            <TrendingDown className="mr-1 h-3 w-3" />
+                          )}
+                          {movementTypeLabels[movement.type as keyof typeof movementTypeLabels] || movement.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center font-medium">
+                        {movement.type === 'entrada' ? '+' : '-'}{movement.quantity}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {movement.previous_stock} → {movement.new_stock}
+                      </TableCell>
+                      <TableCell>{movement.reason || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -414,7 +432,7 @@ export default function Inventory() {
               {movementType === 'entrada' ? 'Entrada de Estoque' : 'Saída de Estoque'}
             </DialogTitle>
             <DialogDescription>
-              {selectedProduct?.name} - Estoque atual: {selectedProduct?.currentStock} {selectedProduct?.unit}
+              {selectedProduct?.name} - Estoque atual: {selectedProduct?.current_stock} {selectedProduct?.unit || 'un'}
             </DialogDescription>
           </DialogHeader>
 
@@ -425,10 +443,10 @@ export default function Inventory() {
                 id="quantity"
                 type="number"
                 min="1"
-                max={movementType === 'saida' ? selectedProduct?.currentStock : undefined}
+                max={movementType === 'saida' ? selectedProduct?.current_stock : undefined}
                 value={movementQuantity}
                 onChange={(e) => setMovementQuantity(e.target.value)}
-                placeholder="Digite a quantidade"
+                placeholder="0"
               />
             </div>
 
@@ -441,18 +459,18 @@ export default function Inventory() {
                 <SelectContent>
                   {movementType === 'entrada' ? (
                     <>
-                      <SelectItem value="Compra de estoque">Compra de estoque</SelectItem>
-                      <SelectItem value="Devolução">Devolução</SelectItem>
-                      <SelectItem value="Transferência">Transferência</SelectItem>
-                      <SelectItem value="Ajuste de inventário">Ajuste de inventário</SelectItem>
+                      <SelectItem value="compra">Compra</SelectItem>
+                      <SelectItem value="devolucao">Devolução</SelectItem>
+                      <SelectItem value="ajuste">Ajuste de Inventário</SelectItem>
+                      <SelectItem value="transferencia">Transferência</SelectItem>
                     </>
                   ) : (
                     <>
-                      <SelectItem value="Consumo procedimentos">Consumo procedimentos</SelectItem>
-                      <SelectItem value="Consumo diário">Consumo diário</SelectItem>
-                      <SelectItem value="Vencimento">Vencimento</SelectItem>
-                      <SelectItem value="Perda/Avaria">Perda/Avaria</SelectItem>
-                      <SelectItem value="Transferência">Transferência</SelectItem>
+                      <SelectItem value="uso">Uso em Procedimento</SelectItem>
+                      <SelectItem value="venda">Venda</SelectItem>
+                      <SelectItem value="perda">Perda/Vencimento</SelectItem>
+                      <SelectItem value="ajuste">Ajuste de Inventário</SelectItem>
+                      <SelectItem value="transferencia">Transferência</SelectItem>
                     </>
                   )}
                 </SelectContent>
@@ -465,7 +483,7 @@ export default function Inventory() {
                 id="notes"
                 value={movementNotes}
                 onChange={(e) => setMovementNotes(e.target.value)}
-                placeholder="Notas adicionais (opcional)"
+                placeholder="Observações adicionais..."
                 rows={2}
               />
             </div>
@@ -475,11 +493,13 @@ export default function Inventory() {
             <Button variant="outline" onClick={() => setMovementDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button 
+            <Button
               onClick={handleConfirmMovement}
-              className={movementType === 'entrada' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
+              className={movementType === 'entrada' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+              variant={movementType === 'saida' ? 'destructive' : 'default'}
+              disabled={createMovement.isPending}
             >
-              Confirmar {movementType === 'entrada' ? 'Entrada' : 'Saída'}
+              {createMovement.isPending ? 'Registrando...' : 'Confirmar'}
             </Button>
           </DialogFooter>
         </DialogContent>
