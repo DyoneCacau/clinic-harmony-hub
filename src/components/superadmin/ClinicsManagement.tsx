@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff } from "lucide-react";
+import { Plus, MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff, Eye, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -61,6 +61,9 @@ export function ClinicsManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
   const [selectedClinic, setSelectedClinic] = useState<ClinicWithSubscription | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [newClinic, setNewClinic] = useState({
     name: "",
     email: "",
@@ -415,31 +418,91 @@ export function ClinicsManagement() {
       </CardContent>
 
       {/* Reset Password Dialog */}
-      <Dialog open={isResetPasswordDialogOpen} onOpenChange={setIsResetPasswordDialogOpen}>
+      <Dialog open={isResetPasswordDialogOpen} onOpenChange={(open) => {
+        setIsResetPasswordDialogOpen(open);
+        if (!open) {
+          setNewPassword("");
+          setShowPassword(false);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Resetar Senha</DialogTitle>
+            <DialogTitle>Resetar Senha do Proprietário</DialogTitle>
             <DialogDescription>
-              Esta funcionalidade enviará um e-mail de recuperação de senha para o usuário proprietário da clínica.
+              Defina uma nova senha para o proprietário da clínica.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              Clínica: <strong>{selectedClinic?.name}</strong>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              E-mail: <strong>{selectedClinic?.email}</strong>
-            </p>
+          <div className="py-4 space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                Clínica: <strong>{selectedClinic?.name}</strong>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                E-mail: <strong>{selectedClinic?.email}</strong>
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">Nova Senha</Label>
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Digite a nova senha"
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsResetPasswordDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => {
-              toast.success('E-mail de recuperação enviado!');
-              setIsResetPasswordDialogOpen(false);
-            }}>
-              Enviar E-mail
+            <Button 
+              onClick={async () => {
+                if (!selectedClinic?.owner_user_id) {
+                  toast.error('Esta clínica não tem um proprietário definido');
+                  return;
+                }
+                if (!newPassword || newPassword.length < 6) {
+                  toast.error('A senha deve ter pelo menos 6 caracteres');
+                  return;
+                }
+                
+                setIsResetting(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke('reset-user-password', {
+                    body: {
+                      user_id: selectedClinic.owner_user_id,
+                      new_password: newPassword,
+                    }
+                  });
+
+                  if (error) throw error;
+
+                  toast.success('Senha resetada com sucesso!');
+                  setIsResetPasswordDialogOpen(false);
+                  setNewPassword("");
+                } catch (error: any) {
+                  console.error('Error resetting password:', error);
+                  toast.error(error.message || 'Erro ao resetar senha');
+                } finally {
+                  setIsResetting(false);
+                }
+              }}
+              disabled={isResetting || !newPassword}
+            >
+              {isResetting ? 'Resetando...' : 'Resetar Senha'}
             </Button>
           </DialogFooter>
         </DialogContent>
