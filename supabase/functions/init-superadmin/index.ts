@@ -38,7 +38,21 @@ Deno.serve(async (req) => {
 
     if (existingUser) {
       userId = existingUser.id
-      console.log('User already exists, updating role:', userId)
+      console.log('User already exists, updating password and role:', userId)
+      
+      // Update the password for existing user
+      const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+        password,
+        email_confirm: true
+      })
+      
+      if (updateError) {
+        console.error('Error updating password:', updateError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to update password', details: updateError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     } else {
       // Create user with admin API
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
