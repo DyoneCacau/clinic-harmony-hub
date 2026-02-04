@@ -30,7 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Financial() {
   const [isCashOpen, setIsCashOpen] = useState(true);
-  const [initialBalance, setInitialBalance] = useState(200);
+  const [initialBalance, setInitialBalance] = useState(0);
   const [openedAt, setOpenedAt] = useState(new Date().toISOString());
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);

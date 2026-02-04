@@ -46,14 +46,16 @@ interface SystemUser {
   name: string;
   email: string;
   phone: string;
-  role: 'receptionist' | 'seller';
+  role: 'admin' | 'receptionist' | 'seller' | 'professional';
   is_active: boolean;
   created_at: string;
 }
 
 const ROLE_LABELS = {
+  admin: 'Administrador',
   receptionist: 'Recepcionista',
   seller: 'Vendedor',
+  professional: 'Profissional',
 };
 
 interface UserManagementProps {
@@ -70,7 +72,7 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
     email: '',
     phone: '',
     password: '',
-    role: 'receptionist' as 'receptionist' | 'seller',
+    role: 'receptionist' as 'admin' | 'receptionist' | 'seller' | 'professional',
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -341,7 +343,7 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
                 <Select
                   value={formData.role}
                   onValueChange={(v) =>
-                    setFormData({ ...formData, role: v as 'receptionist' | 'seller' })
+                    setFormData({ ...formData, role: v as 'admin' | 'receptionist' | 'seller' | 'professional' })
                   }
                   disabled={!!editingUser}
                 >
@@ -349,8 +351,10 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="admin">Administrador</SelectItem>
                     <SelectItem value="receptionist">Recepcionista</SelectItem>
                     <SelectItem value="seller">Vendedor</SelectItem>
+                    <SelectItem value="professional">Profissional</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

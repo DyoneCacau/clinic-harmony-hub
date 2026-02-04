@@ -71,7 +71,7 @@ interface SystemUser {
   name: string;
   email: string;
   phone: string;
-  role: 'receptionist' | 'seller';
+  role: 'admin' | 'receptionist' | 'seller' | 'professional';
   is_active: boolean;
   created_at: string;
 }
@@ -121,7 +121,7 @@ export default function Administration() {
     const { data: rolesData } = await supabase
       .from('user_roles')
       .select('*')
-      .in('role', ['receptionist', 'seller']);
+      .in('role', ['admin', 'receptionist', 'seller', 'professional']);
 
     if (profilesData && rolesData) {
       const usersWithRoles: SystemUser[] = [];

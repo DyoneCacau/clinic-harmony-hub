@@ -56,15 +56,28 @@ export default function Inventory() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [stockFilter, setStockFilter] = useState('all');
   const [movementDialogOpen, setMovementDialogOpen] = useState(false);
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [movementType, setMovementType] = useState<'entrada' | 'saida'>('entrada');
   const [movementQuantity, setMovementQuantity] = useState('');
   const [movementReason, setMovementReason] = useState('');
   const [movementNotes, setMovementNotes] = useState('');
+  
+  // Product form fields
+  const [productName, setProductName] = useState('');
+  const [productSku, setProductSku] = useState('');
+  const [productCategory, setProductCategory] = useState('');
+  const [productDescription, setProductDescription] = useState('');
+  const [productCostPrice, setProductCostPrice] = useState('');
+  const [productSalePrice, setProductSalePrice] = useState('');
+  const [productCurrentStock, setProductCurrentStock] = useState('');
+  const [productMinimumStock, setProductMinimumStock] = useState('');
+  const [productUnit, setProductUnit] = useState('un');
 
   const { products, isLoading: isLoadingProducts } = useInventoryProducts();
   const { movements, isLoading: isLoadingMovements } = useInventoryMovements();
-  const { createMovement } = useInventoryMutations();
+  const { createMovement, createProduct } = useInventoryMutations();
+
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -132,7 +145,40 @@ export default function Inventory() {
     setMovementDialogOpen(false);
   };
 
-  if (isLoadingProducts || isLoadingMovements) {
+  const handleOpenProductDialog = () => {
+    setProductName('');
+    setProductSku('');
+    setProductCategory('');
+    setProductDescription('');
+    setProductCostPrice('');
+    setProductSalePrice('');
+    setProductCurrentStock('0');
+    setProductMinimumStock('0');
+    setProductUnit('un');
+    setProductDialogOpen(true);
+  };
+
+  const handleSaveProduct = async () => {
+    if (!productName.trim()) {
+      toast.error('Nome do produto é obrigatório');
+      return;
+    }
+
+    await createProduct.mutateAsync({
+      name: productName,
+      sku: productSku || null,
+      description: productDescription || null,
+      category: productCategory || null,
+      current_stock: parseInt(productCurrentStock) || 0,
+      minimum_stock: parseInt(productMinimumStock) || 0,
+      cost_price: parseFloat(productCostPrice) || 0,
+      sale_price: parseFloat(productSalePrice) || 0,
+      unit: productUnit || 'un',
+      is_active: true,
+    });
+
+    setProductDialogOpen(false);
+  };
     return (
       <MainLayout>
         <div className="space-y-6 p-6">
@@ -168,7 +214,7 @@ export default function Inventory() {
             </h1>
             <p className="text-muted-foreground">Gerencie os produtos e movimentações</p>
           </div>
-          <FeatureButton feature="estoque">
+          <FeatureButton feature="estoque" onClick={handleOpenProductDialog}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Produto
           </FeatureButton>
@@ -500,6 +546,71 @@ export default function Inventory() {
               disabled={createMovement.isPending}
             >
               {createMovement.isPending ? 'Registrando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Dialog */}
+      <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo Produto</DialogTitle>
+            <DialogDescription>Cadastre um novo produto no estoque</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="productName">Nome *</Label>
+              <Input id="productName" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Nome do produto" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="productSku">SKU</Label>
+                <Input id="productSku" value={productSku} onChange={(e) => setProductSku(e.target.value)} placeholder="Código" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="productCategory">Categoria</Label>
+                <Select value={productCategory} onValueChange={setProductCategory}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(inventoryCategoryLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Preço Custo</Label>
+                <Input type="number" step="0.01" value={productCostPrice} onChange={(e) => setProductCostPrice(e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Preço Venda</Label>
+                <Input type="number" step="0.01" value={productSalePrice} onChange={(e) => setProductSalePrice(e.target.value)} placeholder="0.00" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label>Estoque Inicial</Label>
+                <Input type="number" value={productCurrentStock} onChange={(e) => setProductCurrentStock(e.target.value)} placeholder="0" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Estoque Mínimo</Label>
+                <Input type="number" value={productMinimumStock} onChange={(e) => setProductMinimumStock(e.target.value)} placeholder="0" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Unidade</Label>
+                <Input value={productUnit} onChange={(e) => setProductUnit(e.target.value)} placeholder="un" />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProductDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSaveProduct} disabled={createProduct.isPending}>
+              {createProduct.isPending ? 'Salvando...' : 'Cadastrar'}
             </Button>
           </DialogFooter>
         </DialogContent>

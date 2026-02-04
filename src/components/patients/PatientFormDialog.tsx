@@ -37,6 +37,35 @@ const formatCPF = (value: string) => {
     .slice(0, 14);
 };
 
+const validateCPF = (cpf: string): boolean => {
+  const numbers = cpf.replace(/\D/g, '');
+  
+  if (numbers.length !== 11) return false;
+  
+  // Check for known invalid patterns
+  if (/^(\d)\1{10}$/.test(numbers)) return false;
+  
+  // Validate first check digit
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(numbers[i]) * (10 - i);
+  }
+  let remainder = (sum * 10) % 11;
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(numbers[9])) return false;
+  
+  // Validate second check digit
+  sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(numbers[i]) * (11 - i);
+  }
+  remainder = (sum * 10) % 11;
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(numbers[10])) return false;
+  
+  return true;
+};
+
 const formatPhone = (value: string) => {
   const numbers = value.replace(/\D/g, '');
   return numbers
@@ -114,6 +143,10 @@ export const PatientFormDialog = ({
       toast.error('CPF é obrigatório');
       return;
     }
+    if (!validateCPF(formData.cpf)) {
+      toast.error('CPF inválido. Por favor, verifique o número informado.');
+      return;
+    }
     if (!formData.phone.trim()) {
       toast.error('Telefone é obrigatório');
       return;
@@ -125,7 +158,6 @@ export const PatientFormDialog = ({
       ...(patient?.id && { id: patient.id }),
     });
     onOpenChange(false);
-    toast.success(patient ? 'Paciente atualizado com sucesso!' : 'Paciente cadastrado com sucesso!');
   };
 
   return (
