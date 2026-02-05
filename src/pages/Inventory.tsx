@@ -164,20 +164,23 @@ export default function Inventory() {
       return;
     }
 
-    await createProduct.mutateAsync({
-      name: productName,
-      sku: productSku || null,
-      description: productDescription || null,
-      category: productCategory || null,
-      current_stock: parseInt(productCurrentStock) || 0,
-      minimum_stock: parseInt(productMinimumStock) || 0,
-      cost_price: parseFloat(productCostPrice) || 0,
-      sale_price: parseFloat(productSalePrice) || 0,
-      unit: productUnit || 'un',
-      is_active: true,
-    });
-
-    setProductDialogOpen(false);
+    try {
+      await createProduct.mutateAsync({
+        name: productName,
+        sku: productSku || null,
+        description: productDescription || null,
+        category: productCategory || null,
+        current_stock: parseInt(productCurrentStock) || 0,
+        minimum_stock: parseInt(productMinimumStock) || 0,
+        cost_price: parseFloat(productCostPrice) || 0,
+        sale_price: parseFloat(productSalePrice) || 0,
+        unit: productUnit || 'un',
+        is_active: true,
+      });
+      setProductDialogOpen(false);
+    } catch (error) {
+      console.error('Error creating product:', error);
+    }
   };
 
   if (isLoadingProducts || isLoadingMovements) {
