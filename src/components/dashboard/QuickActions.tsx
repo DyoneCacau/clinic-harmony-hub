@@ -9,6 +9,7 @@ import { usePatientMutations } from "@/hooks/usePatients";
 import { useAppointmentMutations } from "@/hooks/useAppointments";
 import { useTransactionMutations } from "@/hooks/useFinancial";
 import { useProfessionals } from "@/hooks/useProfessionals";
+import { useClinic } from "@/hooks/useClinic";
 
 export function QuickActions() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export function QuickActions() {
   const { createAppointment } = useAppointmentMutations();
   const { createTransaction } = useTransactionMutations();
   const { activeProfessionals } = useProfessionals();
+  const { clinic, clinicId } = useClinic();
 
   const handleSavePatient = async (patientData: any) => {
     await createPatient.mutateAsync({
@@ -37,7 +39,20 @@ export function QuickActions() {
   };
 
   const handleSaveAppointment = async (appointmentData: any) => {
-    await createAppointment.mutateAsync(appointmentData);
+    // Transform from dialog format to database format
+    await createAppointment.mutateAsync({
+      patient_id: appointmentData.patientId,
+      professional_id: appointmentData.professional?.id || appointmentData.professionalId,
+      date: appointmentData.date,
+      start_time: appointmentData.startTime,
+      end_time: appointmentData.endTime,
+      procedure: appointmentData.procedure,
+      status: appointmentData.status || 'pending',
+      payment_status: appointmentData.paymentStatus || 'pending',
+      notes: appointmentData.notes || null,
+      seller_id: appointmentData.sellerId || null,
+      lead_source: appointmentData.leadSource || null,
+    });
     setAppointmentDialogOpen(false);
   };
 
@@ -131,7 +146,13 @@ export function QuickActions() {
           specialty: p.specialty,
           cro: p.cro,
         }))}
-        clinics={[]}
+        clinics={clinic ? [{
+          id: clinic.id,
+          name: clinic.name,
+          phone: clinic.phone || '',
+          address: clinic.address || '',
+          cnpj: clinic.cnpj || '',
+        }] : []}
         existingAppointments={[]}
       />
 

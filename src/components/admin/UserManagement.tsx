@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useClinic } from '@/hooks/useClinic';
 
 interface SystemUser {
   id: string;
@@ -64,6 +65,7 @@ interface UserManagementProps {
 }
 
 export function UserManagement({ users, onRefresh }: UserManagementProps) {
+  const { clinicId } = useClinic();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
@@ -144,6 +146,18 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
           });
 
           if (roleError) throw roleError;
+
+          // Link user to clinic
+          if (clinicId) {
+            const { error: clinicError } = await supabase.from('clinic_users').insert({
+              clinic_id: clinicId,
+              user_id: authData.user.id,
+              is_owner: false,
+            });
+            if (clinicError) {
+              console.error('Error linking user to clinic:', clinicError);
+            }
+          }
 
           // Update profile with phone
           if (formData.phone) {

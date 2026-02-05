@@ -259,8 +259,49 @@ export default function Administration() {
     }));
   }, [users]);
 
-  const handleExport = () => {
-    toast.success('Relatório exportado com sucesso!');
+  const handleExportTimesheet = () => {
+    if (filteredEntries.length === 0) {
+      toast.error('Nenhum registro para exportar');
+      return;
+    }
+
+    // Create CSV content
+    const headers = ['Funcionário', 'Tipo', 'Data', 'Hora', 'Status'];
+    const rows = filteredEntries.map((entry) => {
+      const userProfile = users.find((u) => u.id === entry.user_id);
+      const entryTypeLabels: Record<string, string> = {
+        clock_in: 'Entrada',
+        clock_out: 'Saída',
+        lunch_start: 'Início Intervalo',
+        lunch_end: 'Fim Intervalo',
+      };
+      const date = new Date(entry.timestamp);
+      return [
+        userProfile?.name || 'Usuário',
+        entryTypeLabels[entry.entry_type] || entry.entry_type,
+        format(date, 'dd/MM/yyyy'),
+        format(date, 'HH:mm'),
+        entry.correction_status === 'approved' ? 'Aprovado' : entry.correction_status === 'pending' ? 'Pendente' : 'Rejeitado',
+      ];
+    });
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    // Add BOM for UTF-8 encoding
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `folha-ponto-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success('Folha de ponto exportada com sucesso!');
   };
 
   return (
@@ -277,9 +318,9 @@ export default function Administration() {
               Painel administrativo, usuários e folha de ponto
             </p>
           </div>
-          <Button onClick={handleExport}>
+          <Button onClick={handleExportTimesheet}>
             <Download className="mr-2 h-4 w-4" />
-            Exportar Relatório
+            Exportar Folha de Ponto
           </Button>
         </div>
 
