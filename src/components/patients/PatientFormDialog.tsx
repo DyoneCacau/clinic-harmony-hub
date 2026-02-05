@@ -20,12 +20,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Patient } from '@/types/patient';
 import { toast } from 'sonner';
+import { useClinic } from '@/hooks/useClinic';
 
 interface PatientFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   patient?: Patient | null;
-  onSave: (patient: Omit<Patient, 'id' | 'createdAt'> & { id?: string }) => void;
+  onSave: (patient: Omit<Patient, 'id' | 'createdAt'> & { id?: string }) => void | Promise<void>;
 }
 
 const formatCPF = (value: string) => {
@@ -92,6 +93,7 @@ export const PatientFormDialog = ({
   });
   const [allergies, setAllergies] = useState<string[]>([]);
   const [newAllergy, setNewAllergy] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (patient) {
@@ -132,7 +134,7 @@ export const PatientFormDialog = ({
     setAllergies(allergies.filter((a) => a !== allergy));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
@@ -152,12 +154,19 @@ export const PatientFormDialog = ({
       return;
     }
 
-    onSave({
-      ...formData,
-      allergies,
-      ...(patient?.id && { id: patient.id }),
-    });
-    onOpenChange(false);
+    setIsSubmitting(true);
+    try {
+      await onSave({
+        ...formData,
+        allergies,
+        ...(patient?.id && { id: patient.id }),
+      });
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error saving patient:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -303,8 +312,8 @@ export const PatientFormDialog = ({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit">
-              {patient ? 'Salvar Alterações' : 'Cadastrar Paciente'}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Salvando...' : patient ? 'Salvar Alterações' : 'Cadastrar Paciente'}
             </Button>
           </div>
         </form>

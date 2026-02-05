@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -58,19 +58,45 @@ export function ProfessionalFormDialog({
   professional,
   onSave,
 }: ProfessionalFormDialogProps) {
-  const [formData, setFormData] = useState<Professional>(
-    professional || {
-      name: '',
-      specialty: '',
-      cro: '',
-      email: '',
-      phone: '',
-      is_active: true,
-      hire_date: new Date().toISOString().split('T')[0],
-    }
-  );
+  const [formData, setFormData] = useState<Professional>({
+    name: '',
+    specialty: '',
+    cro: '',
+    email: '',
+    phone: '',
+    is_active: true,
+    hire_date: new Date().toISOString().split('T')[0],
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (open) {
+      if (professional) {
+        setFormData({
+          id: professional.id,
+          name: professional.name,
+          specialty: professional.specialty,
+          cro: professional.cro,
+          email: professional.email || '',
+          phone: professional.phone || '',
+          is_active: professional.is_active,
+          hire_date: professional.hire_date || new Date().toISOString().split('T')[0],
+        });
+      } else {
+        setFormData({
+          name: '',
+          specialty: '',
+          cro: '',
+          email: '',
+          phone: '',
+          is_active: true,
+          hire_date: new Date().toISOString().split('T')[0],
+        });
+      }
+    }
+  }, [open, professional]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.specialty || !formData.cro) {
@@ -78,18 +104,15 @@ export function ProfessionalFormDialog({
       return;
     }
 
-    onSave(formData);
-    onOpenChange(false);
-    
-    setFormData({
-      name: '',
-      specialty: '',
-      cro: '',
-      email: '',
-      phone: '',
-      is_active: true,
-      hire_date: new Date().toISOString().split('T')[0],
-    });
+    setIsSubmitting(true);
+    try {
+      await onSave(formData);
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error saving professional:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -199,8 +222,8 @@ export function ProfessionalFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit">
-              {professional ? 'Salvar Alterações' : 'Cadastrar'}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Salvando...' : professional ? 'Salvar Alterações' : 'Cadastrar'}
             </Button>
           </DialogFooter>
         </form>
