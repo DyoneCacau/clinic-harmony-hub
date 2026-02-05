@@ -179,6 +179,8 @@ export default function Inventory() {
 
     setProductDialogOpen(false);
   };
+
+  if (isLoadingProducts || isLoadingMovements) {
     return (
       <MainLayout>
         <div className="space-y-6 p-6">
