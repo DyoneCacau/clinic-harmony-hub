@@ -33,7 +33,7 @@ import {
   beneficiaryTypeLabels,
   BeneficiaryType,
 } from '@/types/commission';
-import { mockProfessionals } from '@/data/mockAgenda';
+import { useProfessionals } from '@/hooks/useProfessionals';
 import { cn } from '@/lib/utils';
 
 interface CommissionRulesListProps {
@@ -60,11 +60,11 @@ const getBeneficiaryIcon = (type: BeneficiaryType) => {
 const getBeneficiaryColor = (type: BeneficiaryType) => {
   switch (type) {
     case 'professional':
-      return 'bg-blue-100 text-blue-700 border-blue-200';
+      return 'bg-info/10 text-info border-info/20';
     case 'seller':
-      return 'bg-purple-100 text-purple-700 border-purple-200';
+      return 'bg-primary/10 text-primary border-primary/20';
     case 'reception':
-      return 'bg-teal-100 text-teal-700 border-teal-200';
+      return 'bg-success/10 text-success border-success/20';
   }
 };
 
@@ -76,10 +76,11 @@ export function CommissionRulesList({
 }: CommissionRulesListProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
+  const { professionals } = useProfessionals();
 
   const getProfessionalName = (id: string) => {
     if (id === 'all') return 'Todos';
-    const prof = mockProfessionals.find((p) => p.id === id);
+    const prof = professionals.find((p) => p.id === id);
     return prof?.name || id;
   };
 
@@ -212,7 +213,7 @@ export function CommissionRulesList({
                           className={cn(
                             'h-8 w-8',
                             rule.isActive
-                              ? 'text-emerald-600 hover:text-emerald-700'
+                              ? 'text-success hover:text-success/80'
                               : 'text-muted-foreground hover:text-foreground'
                           )}
                         >

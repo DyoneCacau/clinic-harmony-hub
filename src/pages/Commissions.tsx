@@ -21,13 +21,18 @@ import { CommissionRulesList } from '@/components/commissions/CommissionRulesLis
 import { CommissionRuleForm } from '@/components/commissions/CommissionRuleForm';
 import { CommissionReport } from '@/components/commissions/CommissionReport';
 import { CommissionRule } from '@/types/commission';
-import { mockCommissionRules, mockCommissionCalculations } from '@/data/mockCommissions';
-import { mockClinics } from '@/data/mockClinics';
+import { useClinic, useClinics } from '@/hooks/useClinic';
+import { useCommissions, generateCommissionSummary } from '@/hooks/useCommissions';
 import { toast } from 'sonner';
 import { FeatureButton } from '@/components/subscription/FeatureButton';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Commissions() {
-  const [rules, setRules] = useState<CommissionRule[]>(mockCommissionRules);
+  const { clinicId } = useClinic();
+  const { clinics } = useClinics();
+  const { commissions, isLoading } = useCommissions();
+  
+  const [rules, setRules] = useState<CommissionRule[]>([]);
   const [selectedClinic, setSelectedClinic] = useState<string>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
@@ -37,6 +42,31 @@ export default function Commissions() {
     if (selectedClinic === 'all') return rules;
     return rules.filter((r) => r.clinicId === selectedClinic);
   }, [rules, selectedClinic]);
+
+  // Convert commissions from database to CommissionCalculation format
+  const commissionCalculations = useMemo(() => {
+    return commissions.map(c => ({
+      id: c.id,
+      appointmentId: c.appointment_id || '',
+      professionalId: c.beneficiary_id,
+      professionalName: '',
+      beneficiaryType: c.beneficiary_type as 'professional' | 'seller' | 'reception',
+      beneficiaryId: c.beneficiary_id,
+      beneficiaryName: '',
+      clinicId: c.clinic_id,
+      clinicName: '',
+      procedure: '',
+      serviceValue: c.base_value || 0,
+      quantity: 1,
+      commissionRuleId: '',
+      calculationType: c.percentage ? 'percentage' as const : 'fixed' as const,
+      calculationUnit: 'appointment' as const,
+      ruleValue: c.percentage || c.amount,
+      commissionAmount: c.amount,
+      date: c.created_at.split('T')[0],
+      status: c.status as 'pending' | 'paid',
+    }));
+  }, [commissions]);
 
   const handleSaveRule = (ruleData: Omit<CommissionRule, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingRule) {
@@ -108,6 +138,18 @@ export default function Commissions() {
     };
   }, [filteredRules]);
 
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-64" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-64" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -142,7 +184,7 @@ export default function Commissions() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas as Clínicas</SelectItem>
-                      {mockClinics.map((clinic) => (
+                      {clinics.map((clinic) => (
                         <SelectItem key={clinic.id} value={clinic.id}>
                           {clinic.name}
                         </SelectItem>
@@ -174,12 +216,12 @@ export default function Commissions() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
-                  <Settings className="h-5 w-5 text-emerald-600" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10">
+                  <Settings className="h-5 w-5 text-success" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Ativas</p>
-                  <p className="text-xl font-bold text-emerald-600">{stats.active}</p>
+                  <p className="text-xl font-bold text-success">{stats.active}</p>
                 </div>
               </div>
             </CardContent>
@@ -202,12 +244,12 @@ export default function Commissions() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                  <Percent className="h-5 w-5 text-blue-600" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-info/10">
+                  <Percent className="h-5 w-5 text-info" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Percentuais</p>
-                  <p className="text-xl font-bold text-blue-600">{stats.percentage}</p>
+                  <p className="text-xl font-bold text-info">{stats.percentage}</p>
                 </div>
               </div>
             </CardContent>
@@ -216,12 +258,12 @@ export default function Commissions() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                  <BarChart3 className="h-5 w-5 text-amber-600" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning/10">
+                  <BarChart3 className="h-5 w-5 text-warning" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Valor Fixo</p>
-                  <p className="text-xl font-bold text-amber-600">{stats.fixed}</p>
+                  <p className="text-xl font-bold text-warning">{stats.fixed}</p>
                 </div>
               </div>
             </CardContent>
@@ -258,7 +300,7 @@ export default function Commissions() {
           </TabsContent>
 
           <TabsContent value="report" className="mt-6">
-            <CommissionReport calculations={mockCommissionCalculations} />
+            <CommissionReport calculations={commissionCalculations} />
           </TabsContent>
         </Tabs>
       </div>

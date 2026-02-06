@@ -1,7 +1,6 @@
 import { CommissionRule, CommissionCalculation, CalculationType, BeneficiaryType, calculateAutoPriority } from '@/types/commission';
 import { Transaction } from '@/types/financial';
 import { AgendaAppointment } from '@/types/agenda';
-import { mockCommissionRules, mockProcedurePrices, mockStaffMembers, mockCommissionCalculations } from '@/data/mockCommissions';
 
 export interface CompleteAppointmentResult {
   commissions: CommissionCalculation[];
@@ -99,7 +98,7 @@ export function validateCommissionDelete(
 export function hasExistingCommission(
   appointmentId: string,
   beneficiaryType: BeneficiaryType = 'professional',
-  existingCalculations: CommissionCalculation[] = mockCommissionCalculations
+  existingCalculations: CommissionCalculation[] = []
 ): boolean {
   return existingCalculations.some(
     calc => calc.appointmentId === appointmentId && calc.beneficiaryType === beneficiaryType
@@ -197,38 +196,24 @@ export function calculateCommissionAmount(
 }
 
 /**
- * Gets the price for a procedure from the price table
+ * Gets the price for a procedure - returns default if not found
  */
 export function getProcedurePrice(
   procedure: string,
   clinicId: string
 ): number {
-  const priceEntry = mockProcedurePrices.find(
-    (p) => p.name === procedure && p.clinicId === clinicId && p.isActive
-  );
-  
-  if (priceEntry) {
-    return priceEntry.price;
-  }
-  
-  // Fallback: try to find by similar name
-  const similarEntry = mockProcedurePrices.find(
-    (p) => p.name.toLowerCase().includes(procedure.toLowerCase()) && p.isActive
-  );
-  
-  // Return default price if not found
-  return similarEntry?.price || 150;
+  // Return default price - in production this would query the database
+  return 150;
 }
 
 /**
  * Completes an appointment and generates all related financial entries
- * Now supports multiple commissions (professional + seller + reception)
  */
 export function completeAppointment(
   appointment: AgendaAppointment,
   serviceValue: number,
   paymentMethod: Transaction['paymentMethod'],
-  rules: CommissionRule[] = mockCommissionRules,
+  rules: CommissionRule[] = [],
   quantity: number = 1,
   sellerId?: string,
   receptionistId?: string
@@ -283,13 +268,11 @@ export function completeAppointment(
     let beneficiaryName = rule.beneficiaryName;
     
     if (rule.beneficiaryType === 'seller' && effectiveSellerId) {
-      const seller = mockStaffMembers.find(s => s.id === effectiveSellerId);
       beneficiaryId = effectiveSellerId;
-      beneficiaryName = seller?.name || appointment.sellerName || 'Vendedor';
+      beneficiaryName = appointment.sellerName || 'Vendedor';
     } else if (rule.beneficiaryType === 'reception' && receptionistId) {
-      const receptionist = mockStaffMembers.find(s => s.id === receptionistId);
       beneficiaryId = receptionistId;
-      beneficiaryName = receptionist?.name || 'Recepcionista';
+      beneficiaryName = 'Recepcionista';
     }
 
     // Create commission calculation record with seller and lead info
@@ -366,12 +349,8 @@ export function formatCommissionInfo(rule: CommissionRule | null): string {
 }
 
 /**
- * Gets available staff members by role
+ * Gets available staff members by role - returns empty array (use hooks to get real data)
  */
-export function getStaffByRole(role: BeneficiaryType, clinicId?: string): typeof mockStaffMembers {
-  return mockStaffMembers.filter(s => 
-    s.role === role && 
-    s.isActive && 
-    (!clinicId || s.clinicId === clinicId)
-  );
+export function getStaffByRole(role: BeneficiaryType, clinicId?: string): { id: string; name: string; role: string; isActive: boolean; clinicId?: string }[] {
+  return [];
 }
