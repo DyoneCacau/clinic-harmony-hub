@@ -47,7 +47,6 @@ import {
   validateAppointmentCompletion,
   ValidationResult,
 } from '@/services/commissionService';
-import { mockCommissionRules, mockCommissionCalculations } from '@/data/mockCommissions';
 import { cn } from '@/lib/utils';
 
 interface CompleteAppointmentDialogProps {
@@ -60,6 +59,7 @@ interface CompleteAppointmentDialogProps {
     paymentMethod: PaymentMethod,
     quantity: number
   ) => void;
+  commissionRules?: CommissionRule[];
 }
 
 const formatCurrency = (value: number) =>
@@ -70,6 +70,7 @@ export function CompleteAppointmentDialog({
   onOpenChange,
   appointment,
   onComplete,
+  commissionRules = [],
 }: CompleteAppointmentDialogProps) {
   const [serviceValue, setServiceValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
@@ -88,8 +89,8 @@ export function CompleteAppointmentDialog({
       // Validate appointment completion
       const validationResult = validateAppointmentCompletion(
         appointment,
-        mockCommissionRules,
-        mockCommissionCalculations,
+        commissionRules,
+        [],
         true
       );
       setValidation(validationResult);
@@ -103,7 +104,7 @@ export function CompleteAppointmentDialog({
 
       // Find ALL applicable commission rules (professional + seller + reception)
       const rules = findApplicableRules(
-        mockCommissionRules,
+        commissionRules,
         appointment.professional.id,
         appointment.clinic.id,
         appointment.procedure,
@@ -119,7 +120,7 @@ export function CompleteAppointmentDialog({
       }));
       setCommissionBreakdown(breakdown);
     }
-  }, [appointment]);
+  }, [appointment, commissionRules]);
 
   useEffect(() => {
     if (applicableRules.length > 0 && serviceValue > 0) {

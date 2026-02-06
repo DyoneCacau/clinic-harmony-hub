@@ -41,9 +41,8 @@ import {
   beneficiaryTypeLabels,
   calculateAutoPriority,
 } from '@/types/commission';
-import { mockProfessionals } from '@/data/mockAgenda';
-import { mockClinics } from '@/data/mockClinics';
-import { mockProcedurePrices, mockStaffMembers } from '@/data/mockCommissions';
+import { useProfessionals } from '@/hooks/useProfessionals';
+import { useClinics } from '@/hooks/useClinic';
 
 const formSchema = z.object({
   clinicId: z.string().min(1, 'Selecione uma clínica'),
@@ -61,6 +60,20 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+// Common dental procedures
+const PROCEDURES = [
+  'Consulta',
+  'Limpeza',
+  'Clareamento',
+  'Restauração',
+  'Extração',
+  'Canal',
+  'Implante',
+  'Prótese',
+  'Ortodontia',
+  'Periodontia',
+];
+
 interface CommissionRuleFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,6 +90,8 @@ export function CommissionRuleForm({
   selectedClinicId,
 }: CommissionRuleFormProps) {
   const [selectedClinic, setSelectedClinic] = useState(selectedClinicId || '');
+  const { professionals } = useProfessionals();
+  const { clinics } = useClinics();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -133,19 +148,6 @@ export function CommissionRuleForm({
   const watchCalculationUnit = form.watch('calculationUnit');
   const watchBeneficiaryType = form.watch('beneficiaryType');
 
-  // Get unique procedures for the selected clinic
-  const procedures = mockProcedurePrices
-    .filter((p) => p.clinicId === selectedClinic || !selectedClinic)
-    .map((p) => p.name);
-  const uniqueProcedures = [...new Set(procedures)];
-
-  // Get staff members by type and clinic
-  const staffMembers = mockStaffMembers.filter(
-    (s) => s.role === watchBeneficiaryType && 
-           s.isActive && 
-           (s.clinicId === selectedClinic || !selectedClinic)
-  );
-
   // Calculate preview priority
   const formValues = form.watch();
   const previewPriority = calculateAutoPriority({
@@ -156,14 +158,14 @@ export function CommissionRuleForm({
   });
 
   const handleSubmit = (values: FormValues) => {
-    const beneficiary = staffMembers.find(s => s.id === values.beneficiaryId);
+    const professional = professionals.find(p => p.id === values.beneficiaryId);
     
     onSave({
       clinicId: values.clinicId,
       professionalId: values.professionalId as string | 'all',
       beneficiaryType: values.beneficiaryType as BeneficiaryType,
       beneficiaryId: values.beneficiaryId || undefined,
-      beneficiaryName: beneficiary?.name,
+      beneficiaryName: professional?.name,
       procedure: values.procedure as string | 'all',
       dayOfWeek: values.dayOfWeek as DayOfWeek,
       calculationType: values.calculationType as CalculationType,
@@ -206,7 +208,7 @@ export function CommissionRuleForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {mockClinics.map((clinic) => (
+                      {clinics.map((clinic) => (
                         <SelectItem key={clinic.id} value={clinic.id}>
                           {clinic.name}
                         </SelectItem>
@@ -261,7 +263,7 @@ export function CommissionRuleForm({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="all">Todos os Profissionais</SelectItem>
-                        {mockProfessionals.map((prof) => (
+                        {professionals.map((prof) => (
                           <SelectItem key={prof.id} value={prof.id}>
                             {prof.name}
                           </SelectItem>
@@ -289,11 +291,7 @@ export function CommissionRuleForm({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {staffMembers.map((staff) => (
-                            <SelectItem key={staff.id} value={staff.id}>
-                              {staff.name}
-                            </SelectItem>
-                          ))}
+                          <SelectItem value="">Todos</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -317,7 +315,7 @@ export function CommissionRuleForm({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="all">Todos os Procedimentos</SelectItem>
-                      {uniqueProcedures.map((proc) => (
+                      {PROCEDURES.map((proc) => (
                         <SelectItem key={proc} value={proc}>
                           {proc}
                         </SelectItem>
@@ -485,8 +483,8 @@ export function CommissionRuleForm({
                   <FormLabel>Observações</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Notas sobre esta regra (opcional)"
-                      rows={2}
+                      placeholder="Anotações sobre esta regra..."
+                      className="resize-none"
                       {...field}
                     />
                   </FormControl>
@@ -499,7 +497,9 @@ export function CommissionRuleForm({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">{editingRule ? 'Salvar' : 'Criar Regra'}</Button>
+              <Button type="submit">
+                {editingRule ? 'Salvar Alterações' : 'Criar Regra'}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

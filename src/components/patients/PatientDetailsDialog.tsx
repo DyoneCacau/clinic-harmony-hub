@@ -27,7 +27,7 @@ import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
 import { DentalChart as DentalChartType } from '@/types/dental';
 import { DentalChart } from './DentalChart';
-import { mockDentalCharts, generateEmptyDentalChart } from '@/data/mockDentalCharts';
+import { useDentalChart, useDentalChartMutations } from '@/hooks/useDentalCharts';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -60,16 +60,15 @@ export const PatientDetailsDialog = ({
   appointments,
 }: PatientDetailsDialogProps) => {
   const [activeTab, setActiveTab] = useState('info');
-  const [dentalChart, setDentalChart] = useState<DentalChartType | null>(null);
+  const { chart } = useDentalChart(patient?.id);
+  const { updateChart } = useDentalChartMutations();
 
   if (!patient) return null;
 
-  // Load dental chart for patient
-  const currentChart = dentalChart || mockDentalCharts[patient.id] || generateEmptyDentalChart(patient.id);
-
   const handleUpdateChart = (updatedChart: DentalChartType) => {
-    setDentalChart(updatedChart);
-    // In a real app, this would save to database
+    if (patient?.id) {
+      updateChart.mutate({ patientId: patient.id, chart: updatedChart });
+    }
   };
 
   const age = differenceInYears(new Date(), parseISO(patient.birthDate));
@@ -201,10 +200,12 @@ export const PatientDetailsDialog = ({
 
           <TabsContent value="dental" className="mt-4">
             <ScrollArea className="h-[500px] pr-4">
-              <DentalChart
-                chart={currentChart}
-                onUpdateChart={handleUpdateChart}
-              />
+              {chart && (
+                <DentalChart
+                  chart={chart}
+                  onUpdateChart={handleUpdateChart}
+                />
+              )}
             </ScrollArea>
           </TabsContent>
 

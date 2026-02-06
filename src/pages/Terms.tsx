@@ -5,27 +5,40 @@ import { TermEditor } from '@/components/terms/TermEditor';
 import { TermPrintPreview } from '@/components/terms/TermPrintPreview';
 import { ClinicBrandingEditor } from '@/components/terms/ClinicBrandingEditor';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockClinics } from '@/data/mockClinics';
-import { mockConsentTerms, mockClinicBranding } from '@/data/mockTerms';
-import { mockPatients } from '@/data/mockPatients';
+import { useTerms, useTermMutations, useClinicBranding } from '@/hooks/useTerms';
+import { useClinic } from '@/hooks/useClinic';
+import { usePatients } from '@/hooks/usePatients';
 import { ConsentTerm, ClinicBranding } from '@/types/terms';
+import { Patient } from '@/types/patient';
 import { FileText, Plus, Building2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Terms() {
-  const [selectedClinic, setSelectedClinic] = useState(mockClinics[0].id);
-  const [terms, setTerms] = useState<ConsentTerm[]>(mockConsentTerms);
-  const [brandings, setBrandings] = useState<ClinicBranding[]>(mockClinicBranding);
+  const { clinic, clinicId } = useClinic();
+  const { terms, isLoading } = useTerms();
+  const { createTerm, updateTerm, deleteTerm } = useTermMutations();
+  const { branding, updateBranding } = useClinicBranding();
+  const { patients } = usePatients();
+  
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<ConsentTerm | null>(null);
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
   const [printingTerm, setPrintingTerm] = useState<ConsentTerm | null>(null);
 
-  const clinic = mockClinics.find((c) => c.id === selectedClinic)!;
-  const clinicTerms = terms.filter((t) => t.clinicId === selectedClinic);
-  const clinicBranding = brandings.find((b) => b.clinicId === selectedClinic) || { clinicId: selectedClinic };
-  const samplePatient = mockPatients[0];
+  // Map database patient to Patient type
+  const samplePatient: Patient | null = patients[0] ? {
+    id: patients[0].id,
+    name: patients[0].name,
+    cpf: patients[0].cpf || '',
+    phone: patients[0].phone || '',
+    email: patients[0].email || '',
+    address: patients[0].address || '',
+    birthDate: patients[0].birth_date || '',
+    clinicalNotes: patients[0].clinical_notes || '',
+    allergies: patients[0].allergies || [],
+    createdAt: patients[0].created_at,
+    status: patients[0].status as 'active' | 'inactive',
+  } : null;
 
   const handleNewTerm = () => {
     setEditingTerm(null);
@@ -43,29 +56,36 @@ export default function Terms() {
   };
 
   const handleDeleteTerm = (termId: string) => {
-    setTerms((prev) => prev.filter((t) => t.id !== termId));
-    toast.success('Termo excluído com sucesso!');
+    deleteTerm.mutate(termId);
   };
 
   const handleSaveTerm = (termData: Partial<ConsentTerm>) => {
     if (editingTerm) {
-      setTerms((prev) => prev.map((t) => (t.id === editingTerm.id ? { ...t, ...termData } as ConsentTerm : t)));
-      toast.success('Termo atualizado com sucesso!');
+      updateTerm.mutate({ id: editingTerm.id, ...termData });
     } else {
-      setTerms((prev) => [...prev, termData as ConsentTerm]);
-      toast.success('Termo criado com sucesso!');
+      createTerm.mutate(termData as Omit<ConsentTerm, 'id' | 'createdAt' | 'updatedAt'>);
     }
   };
 
-  const handleSaveBranding = (branding: ClinicBranding) => {
-    setBrandings((prev) => {
-      const exists = prev.find((b) => b.clinicId === branding.clinicId);
-      if (exists) {
-        return prev.map((b) => (b.clinicId === branding.clinicId ? branding : b));
-      }
-      return [...prev, branding];
-    });
+  const handleSaveBranding = (brandingData: ClinicBranding) => {
+    updateBranding.mutate(brandingData);
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-64" />
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <Skeleton className="h-64" />
+            </div>
+            <Skeleton className="h-64" />
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -79,17 +99,12 @@ export default function Terms() {
             <p className="text-muted-foreground">Gerencie os termos e documentos da clínica</p>
           </div>
           <div className="flex items-center gap-3">
-            <Select value={selectedClinic} onValueChange={setSelectedClinic}>
-              <SelectTrigger className="w-[280px]">
-                <Building2 className="h-4 w-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {mockClinics.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {clinic && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Building2 className="h-4 w-4" />
+                {clinic.name}
+              </div>
+            )}
             <Button onClick={handleNewTerm}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Termo
@@ -99,18 +114,31 @@ export default function Terms() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <TermsList terms={clinicTerms} onEdit={handleEditTerm} onPrint={handlePrintTerm} onDelete={handleDeleteTerm} />
+            <TermsList terms={terms} onEdit={handleEditTerm} onPrint={handlePrintTerm} onDelete={handleDeleteTerm} />
           </div>
           <div>
-            <ClinicBrandingEditor branding={clinicBranding} onSave={handleSaveBranding} />
+            <ClinicBrandingEditor branding={branding} onSave={handleSaveBranding} />
           </div>
         </div>
       </div>
 
-      <TermEditor open={editorOpen} onOpenChange={setEditorOpen} term={editingTerm} clinicId={selectedClinic} onSave={handleSaveTerm} />
+      <TermEditor 
+        open={editorOpen} 
+        onOpenChange={setEditorOpen} 
+        term={editingTerm} 
+        clinicId={clinicId || ''} 
+        onSave={handleSaveTerm} 
+      />
       
-      {printingTerm && (
-        <TermPrintPreview open={printPreviewOpen} onOpenChange={setPrintPreviewOpen} term={printingTerm} branding={clinicBranding} patient={samplePatient} clinicName={clinic.name} />
+      {printingTerm && samplePatient && (
+        <TermPrintPreview 
+          open={printPreviewOpen} 
+          onOpenChange={setPrintPreviewOpen} 
+          term={printingTerm} 
+          branding={branding} 
+          patient={samplePatient} 
+          clinicName={clinic?.name || ''} 
+        />
       )}
     </MainLayout>
   );

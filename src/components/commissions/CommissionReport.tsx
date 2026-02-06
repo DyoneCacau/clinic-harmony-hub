@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import {
   Table,
@@ -38,9 +37,9 @@ import {
 } from 'recharts';
 import { CommissionSummary, CommissionCalculation, beneficiaryTypeLabels, BeneficiaryType } from '@/types/commission';
 import { leadSourceLabels, LeadSource } from '@/types/agenda';
-import { generateCommissionSummary } from '@/data/mockCommissions';
+import { generateCommissionSummary } from '@/hooks/useCommissions';
 import { CommissionReportFilters } from './CommissionReportFilters';
-import { mockClinics } from '@/data/mockClinics';
+import { useClinics } from '@/hooks/useClinic';
 import { format, subMonths, parseISO, isWithinInterval } from 'date-fns';
 
 interface CommissionReportProps {
@@ -50,7 +49,7 @@ interface CommissionReportProps {
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const COLORS = ['hsl(var(--success))', 'hsl(var(--info))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--primary))', 'hsl(var(--accent))'];
 
 const leadSourceIcons: Record<LeadSource, typeof Instagram> = {
   instagram: Instagram,
@@ -67,6 +66,7 @@ const beneficiaryIcons: Record<BeneficiaryType, typeof Stethoscope> = {
 };
 
 export function CommissionReport({ calculations }: CommissionReportProps) {
+  const { clinics } = useClinics();
   const [startDate, setStartDate] = useState(format(subMonths(new Date(), 3), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedClinic, setSelectedClinic] = useState('all');
@@ -76,10 +76,14 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
   const filteredCalculations = useMemo(() => {
     return calculations.filter(calc => {
       // Filter by date range
-      const calcDate = parseISO(calc.date);
-      const start = parseISO(startDate);
-      const end = parseISO(endDate);
-      if (!isWithinInterval(calcDate, { start, end })) return false;
+      try {
+        const calcDate = parseISO(calc.date);
+        const start = parseISO(startDate);
+        const end = parseISO(endDate);
+        if (!isWithinInterval(calcDate, { start, end })) return false;
+      } catch {
+        return false;
+      }
 
       // Filter by clinic
       if (selectedClinic !== 'all' && calc.clinicId !== selectedClinic) return false;
@@ -167,12 +171,11 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
   })).filter(d => d.value > 0);
 
   const statusData = [
-    { name: 'Pago', value: totals.paidCommission, color: '#10b981' },
-    { name: 'Pendente', value: totals.pendingCommission, color: '#f59e0b' },
+    { name: 'Pago', value: totals.paidCommission, color: 'hsl(var(--success))' },
+    { name: 'Pendente', value: totals.pendingCommission, color: 'hsl(var(--warning))' },
   ];
 
   const handleExport = () => {
-    // TODO: Implement export
     console.log('Exporting commission report...');
   };
 
@@ -211,10 +214,10 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
                   <TableCell className="text-right font-semibold">
                     {formatCurrency(s.totalCommission)}
                   </TableCell>
-                  <TableCell className="text-right text-amber-600">
+                  <TableCell className="text-right text-warning">
                     {formatCurrency(s.pendingCommission)}
                   </TableCell>
-                  <TableCell className="text-right text-emerald-600">
+                  <TableCell className="text-right text-success">
                     {formatCurrency(s.paidCommission)}
                   </TableCell>
                 </TableRow>
@@ -223,8 +226,8 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
                 <TableCell>Subtotal</TableCell>
                 <TableCell className="text-center">{data.reduce((acc, s) => acc + s.totalServices, 0)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(data.reduce((acc, s) => acc + s.totalCommission, 0))}</TableCell>
-                <TableCell className="text-right text-amber-600">{formatCurrency(data.reduce((acc, s) => acc + s.pendingCommission, 0))}</TableCell>
-                <TableCell className="text-right text-emerald-600">{formatCurrency(data.reduce((acc, s) => acc + s.paidCommission, 0))}</TableCell>
+                <TableCell className="text-right text-warning">{formatCurrency(data.reduce((acc, s) => acc + s.pendingCommission, 0))}</TableCell>
+                <TableCell className="text-right text-success">{formatCurrency(data.reduce((acc, s) => acc + s.paidCommission, 0))}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -245,7 +248,7 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
         onEndDateChange={setEndDate}
         onClinicChange={setSelectedClinic}
         onBeneficiaryTypeChange={setSelectedBeneficiaryType}
-        clinics={mockClinics}
+        clinics={clinics}
         onExport={handleExport}
       />
 
@@ -254,8 +257,8 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-                <DollarSign className="h-6 w-6 text-blue-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-info/10">
+                <DollarSign className="h-6 w-6 text-info" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Faturamento</p>
@@ -268,8 +271,8 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-                <Percent className="h-6 w-6 text-emerald-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+                <Percent className="h-6 w-6 text-success" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Comissões</p>
@@ -282,12 +285,12 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
-                <Clock className="h-6 w-6 text-amber-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
+                <Clock className="h-6 w-6 text-warning" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pendente</p>
-                <p className="text-xl font-bold text-amber-600">
+                <p className="text-xl font-bold text-warning">
                   {formatCurrency(totals.pendingCommission)}
                 </p>
               </div>
@@ -298,12 +301,12 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                <CheckCircle className="h-6 w-6 text-green-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+                <CheckCircle className="h-6 w-6 text-success" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pago</p>
-                <p className="text-xl font-bold text-green-600">
+                <p className="text-xl font-bold text-success">
                   {formatCurrency(totals.paidCommission)}
                 </p>
               </div>
@@ -314,8 +317,8 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                <Lock className="h-6 w-6 text-slate-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <Lock className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Imutáveis</p>
@@ -329,8 +332,8 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
 
       {/* Alert about immutable rules */}
       {paidCount > 0 && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
-          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20 text-warning-foreground">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-warning" />
           <p className="text-sm">
             <strong>{paidCount} comissão(ões)</strong> já foi(ram) paga(s) e não pode(m) ser editada(s) ou excluída(s).
           </p>
@@ -343,7 +346,6 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
           <TabsTrigger value="by-type">Por Tipo de Beneficiário</TabsTrigger>
           <TabsTrigger value="charts">Gráficos</TabsTrigger>
           <TabsTrigger value="lead-source">Por Origem do Lead</TabsTrigger>
-          <TabsTrigger value="detailed">Tabela Detalhada</TabsTrigger>
         </TabsList>
 
         {/* By Type Tab */}
@@ -370,11 +372,11 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
                     <Separator className="my-3" />
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Pendente</span>
-                      <span className="font-medium text-amber-600">{formatCurrency(data.pending)}</span>
+                      <span className="font-medium text-warning">{formatCurrency(data.pending)}</span>
                     </div>
                     <div className="flex justify-between text-sm mt-1">
                       <span className="text-muted-foreground">Pago</span>
-                      <span className="font-medium text-emerald-600">{formatCurrency(data.paid)}</span>
+                      <span className="font-medium text-success">{formatCurrency(data.paid)}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -392,12 +394,12 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
             {renderBeneficiaryTable(
               summaryByType.seller,
               'Vendedores',
-              <UserCheck className="h-4 w-4 text-blue-600" />
+              <UserCheck className="h-4 w-4 text-info" />
             )}
             {renderBeneficiaryTable(
               summaryByType.reception,
               'Recepção',
-              <Headphones className="h-4 w-4 text-purple-600" />
+              <Headphones className="h-4 w-4 text-success" />
             )}
           </div>
         </TabsContent>
@@ -419,8 +421,8 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
                       formatter={(value: number) => formatCurrency(value)}
                     />
                     <Legend />
-                    <Bar dataKey="pago" name="Pago" fill="#10b981" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="pendente" name="Pendente" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="pago" name="Pago" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="pendente" name="Pendente" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -447,149 +449,61 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
           </div>
-
-          {/* Status Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Status de Pagamentos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                    <span>Pago</span>
-                  </div>
-                  <span className="font-semibold">{formatCurrency(totals.paidCommission)}</span>
-                </div>
-                <Progress
-                  value={totals.totalCommission > 0 ? (totals.paidCommission / totals.totalCommission) * 100 : 0}
-                  className="h-3 bg-muted"
-                />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-amber-500" />
-                    <span>Pendente</span>
-                  </div>
-                  <span className="font-semibold">{formatCurrency(totals.pendingCommission)}</span>
-                </div>
-                <Progress
-                  value={totals.totalCommission > 0 ? (totals.pendingCommission / totals.totalCommission) * 100 : 0}
-                  className="h-3 bg-muted [&>div]:bg-amber-500"
-                />
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Lead Source Tab */}
-        <TabsContent value="lead-source">
+        <TabsContent value="lead-source" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Análise por Origem do Lead
-              </CardTitle>
+              <CardTitle className="text-lg">Comissões por Origem do Lead</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                {leadSourceStats.map((stat) => {
-                  const Icon = leadSourceIcons[stat.source] || HelpCircle;
-                  return (
-                    <div key={stat.source} className="p-4 rounded-lg border bg-card">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium text-sm">{stat.name}</span>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">
-                          {stat.count} atendimento(s)
-                        </p>
-                        <p className="text-sm font-semibold">
-                          {formatCurrency(stat.revenue)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Detailed Table Tab */}
-        <TabsContent value="detailed">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Resumo Consolidado</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Beneficiário</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-center">Atendimentos</TableHead>
-                    <TableHead className="text-right">Faturamento</TableHead>
-                    <TableHead className="text-right">Comissão Total</TableHead>
-                    <TableHead className="text-right">Taxa Média</TableHead>
-                    <TableHead className="text-right">Pendente</TableHead>
-                    <TableHead className="text-right">Pago</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {summary.map((s) => (
-                    <TableRow key={`${s.beneficiaryType}-${s.professionalId}`}>
-                      <TableCell className="font-medium">{s.professionalName}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {beneficiaryTypeLabels[s.beneficiaryType]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline">{s.totalServices}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{formatCurrency(s.totalRevenue)}</TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {formatCurrency(s.totalCommission)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="secondary">{s.averageCommissionRate.toFixed(1)}%</Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-amber-600">
-                        {formatCurrency(s.pendingCommission)}
-                      </TableCell>
-                      <TableCell className="text-right text-emerald-600">
-                        {formatCurrency(s.paidCommission)}
-                      </TableCell>
+              {leadSourceStats.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhum dado de origem de lead disponível
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Origem</TableHead>
+                      <TableHead className="text-center">Atendimentos</TableHead>
+                      <TableHead className="text-right">Faturamento</TableHead>
+                      <TableHead className="text-right">Comissões</TableHead>
                     </TableRow>
-                  ))}
-                  <TableRow className="bg-muted/50 font-semibold">
-                    <TableCell>Total</TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-center">{totals.totalServices}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totals.totalRevenue)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totals.totalCommission)}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge>
-                        {totals.totalRevenue > 0 ? ((totals.totalCommission / totals.totalRevenue) * 100).toFixed(1) : '0'}%
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-amber-600">
-                      {formatCurrency(totals.pendingCommission)}
-                    </TableCell>
-                    <TableCell className="text-right text-emerald-600">
-                      {formatCurrency(totals.paidCommission)}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {leadSourceStats.map((stat) => {
+                      const Icon = leadSourceIcons[stat.source] || HelpCircle;
+                      return (
+                        <TableRow key={stat.source}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-4 w-4 text-muted-foreground" />
+                              {stat.name}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline">{stat.count}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(stat.revenue)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(stat.commission)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
