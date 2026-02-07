@@ -11,6 +11,7 @@ import { Building2, CreditCard, Calendar, Check, Loader2, AlertTriangle, Crown, 
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { UpgradePlanDialog } from '@/components/subscription/UpgradePlanDialog';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow, isPast } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -77,6 +78,7 @@ export default function Settings() {
     state: '',
     zip_code: '',
   });
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -338,11 +340,11 @@ export default function Settings() {
                 </div>
 
                 {/* Upgrade Button */}
-                {subscription?.status === 'trial' && (
+                {(subscription?.status === 'trial' || subscription?.status === 'active') && (
                   <div className="pt-4">
-                    <Button className="gap-2">
+                    <Button className="gap-2" onClick={() => setShowUpgradeDialog(true)}>
                       <Sparkles className="h-4 w-4" />
-                      Fazer Upgrade do Plano
+                      {subscription?.status === 'trial' ? 'Fazer Upgrade do Plano' : 'Alterar Plano'}
                     </Button>
                   </div>
                 )}
@@ -468,6 +470,16 @@ export default function Settings() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <UpgradePlanDialog
+          open={showUpgradeDialog}
+          onOpenChange={setShowUpgradeDialog}
+          currentPlanSlug={plan?.slug}
+          onSuccess={() => {
+            refreshSubscription();
+            fetchData();
+          }}
+        />
       </div>
     </MainLayout>
   );
